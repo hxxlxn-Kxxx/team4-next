@@ -22,7 +22,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       // 1. 백엔드 로그인 API 호출 (임시 포트 8080 사용, 실제 URL로 변경 필요!)
-      const response = await fetch("http://localhost:8080/api/login", {
+      const response = await fetch("http://localhost:8080/auth/google", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

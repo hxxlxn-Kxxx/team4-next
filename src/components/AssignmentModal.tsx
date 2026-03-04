@@ -15,6 +15,7 @@ import {
   TextField,
   Chip,
   Stack,
+  MenuItem,
   Divider,
   Tooltip,
 } from "@mui/material";
@@ -25,12 +26,22 @@ interface AssignmentModalProps {
   onClose: () => void;
 }
 
-const steps = [
-  "기본 정보 (날짜/시간)",
-  "장소 및 명단",
-  "지도안 및 수업명",
-  "강사 배정",
-];
+const steps = ["날짜/시간", "장소 및 지도안", "강사 배정"];
+
+const START_HOUR = 8;
+const END_HOUR = 22;
+
+const START_TIME_OPTIONS = Array.from({ length: (22 - 8) * 2 + 1 }, (_, i) => {
+  const hours = 8 + Math.floor(i / 2);
+  const minutes = i % 2 === 0 ? "00" : "30";
+  return `${hours.toString().padStart(2, "0")}:${minutes}`;
+});
+
+const END_TIME_OPTIONS = Array.from({ length: (24 - 8) * 2 + 1 }, (_, i) => {
+  const hours = 8 + Math.floor(i / 2);
+  const minutes = i % 2 === 0 ? "00" : "30";
+  return `${hours.toString().padStart(2, "0")}:${minutes}`;
+});
 
 export default function AssignmentModal({
   open,
@@ -38,16 +49,41 @@ export default function AssignmentModal({
 }: AssignmentModalProps) {
   const [activeStep, setActiveStep] = useState(0);
 
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("11:00");
+
+  const [location, setLocation] = useState("");
+  const [selectedInstructor, setSelectedInstructor] = useState("");
+
+  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStart = e.target.value;
+    setStartTime(newStart);
+
+    if (newStart) {
+      const [hourStr, minuteStr] = newStart.split(":");
+      let hour = (parseInt(hourStr, 10) + 2) % 24;
+
+      const formattedHour = hour.toString().padStart(2, "0");
+      setEndTime(`${formattedHour}:${minuteStr}`);
+    } else {
+      setEndTime("");
+    }
+  };
+
   const handleNext = () => setActiveStep((prev) => prev + 1);
   const handleBack = () => setActiveStep((prev) => prev - 1);
   const handleClose = () => {
     setActiveStep(0);
+    setStartTime("09:00");
+    setEndTime("11:00");
+    setLocation("");
+    setSelectedInstructor("");
     onClose();
   };
 
   const renderStepContent = (step: number) => {
     switch (step) {
-      case 0: // 1단계: 기획서의 날짜/시간 [cite: 39, 40, 41]
+      case 0: // 1단계: 날짜/시간
         return (
           <Box sx={{ mt: 2 }}>
             <Typography
@@ -67,24 +103,40 @@ export default function AssignmentModal({
               />
               <Stack direction="row" spacing={2}>
                 <TextField
-                  type="time"
+                  select
                   label="시작시간"
+                  value={startTime}
+                  onChange={handleStartTimeChange}
                   InputLabelProps={{ shrink: true }}
                   fullWidth
                   required
-                />
+                >
+                  {START_TIME_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 <TextField
-                  type="time"
+                  select
                   label="종료시간"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
                   InputLabelProps={{ shrink: true }}
                   fullWidth
                   required
-                />
+                >
+                  {END_TIME_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option === "24:00" ? "24:00 (자정)" : option}
+                    </MenuItem>
+                  ))}
+                </TextField>
               </Stack>
             </Stack>
           </Box>
         );
-      case 1: // 2단계: 기획서의 장소, 학생명단 [cite: 42, 43]
+      case 1: // 2단계: 장소, 지도안링크
         return (
           <Box sx={{ mt: 2 }}>
             <Typography
@@ -92,37 +144,80 @@ export default function AssignmentModal({
               color="textSecondary"
               sx={{ mb: 2 }}
             >
-              수업 장소와 참여 학생 명단을 입력하세요.
+              수업 장소와 진행할 지도안(노션) 링크를 입력하세요.
             </Typography>
             <Stack spacing={3}>
               <Box>
-                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                  <Chip
-                    label="역사나래 본원"
-                    onClick={() => {}}
-                    color="primary"
-                    variant="outlined"
-                  />
+                <Typography
+                  variant="caption"
+                  color="textSecondary"
+                  sx={{ display: "block", mb: 1 }}
+                ></Typography>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}
+                >
                   <Chip
                     label="국립중앙박물관"
-                    onClick={() => {}}
+                    onClick={() => setLocation("국립중앙박물관")}
                     color="primary"
                     variant="outlined"
+                    sx={{ cursor: "pointer" }}
+                  />
+                  <Chip
+                    label="국립경주박물관"
+                    onClick={() => setLocation("국립경주박물관")}
+                    color="primary"
+                    variant="outlined"
+                    sx={{ cursor: "pointer" }}
                   />
                 </Stack>
-                <TextField label="장소 (필수)" fullWidth required />
+                <TextField
+                  label="장소 (필수)"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="직접 입력하거나 위의 버튼을 클릭하세요"
+                  fullWidth
+                  required
+                />
               </Box>
-              <TextField
-                label="학생명단 (선택)"
-                placeholder="예: 김철수, 이영희, 박지성"
-                multiline
-                rows={2}
-                fullWidth
-              />
+
+              <Divider sx={{ my: 1 }} />
+
+              <Box>
+                <TextField
+                  label="지도안 링크 (노션 URL)"
+                  placeholder="https://notion.so/..."
+                  fullWidth
+                  sx={{ mb: 3 }}
+                />
+              </Box>
             </Stack>
           </Box>
         );
-      case 2: // 3단계: 기획서의 수업명 + 노션 링크 [cite: 38]
+      case 2: // 3단계: 강사 선택
+        // db 연결시 수정해야함.
+        const mockInstructors = [
+          {
+            id: "inst_1",
+            name: "강혜린",
+            status: "가용확인 완료",
+            match: "98%",
+          },
+          {
+            id: "inst_2",
+            name: "김용관",
+            status: "스케줄 확인 필요",
+            match: "85%",
+          },
+          {
+            id: "inst_3",
+            name: "박지혁",
+            status: "긴급 대강 가능",
+            match: "70%",
+          },
+        ];
         return (
           <Box sx={{ mt: 2 }}>
             <Typography
@@ -130,52 +225,64 @@ export default function AssignmentModal({
               color="textSecondary"
               sx={{ mb: 2 }}
             >
-              지도안 링크를 넣으면 수업명이 자동으로 채워집니다.
-            </Typography>
-            <Stack spacing={3}>
-              <TextField
-                label="지도안 링크 (노션 URL)"
-                placeholder="https://notion.so/..."
-                fullWidth
-              />
-              <Divider>또는</Divider>
-              <TextField
-                label="수업명 (필수)"
-                placeholder="직접 입력 시 여기에 작성하세요"
-                fullWidth
-                required
-              />
-            </Stack>
-          </Box>
-        );
-      case 3: // 4단계: 강사 선택
-        return (
-          <Box sx={{ mt: 2 }}>
-            <Typography
-              variant="subtitle2"
-              color="textSecondary"
-              sx={{ mb: 2 }}
-            >
-              투입 가능한 강사 목록입니다.
+              해당 일정과 장소에 투입 가능한 강사 목록입니다.
             </Typography>
             <Stack spacing={2}>
-              <Box
-                sx={{
-                  p: 2,
-                  border: "1px solid #eee",
-                  borderRadius: 2,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <Typography fontWeight="bold">
-                  김철수 강사 (가용확인 완료)
-                </Typography>
-                <Button variant="contained" size="small">
-                  선택
-                </Button>
-              </Box>
+              {mockInstructors.map((inst) => {
+                // 💡 현재 순회 중인 강사가 선택된 강사인지 확인
+                const isSelected = selectedInstructor === inst.id;
+
+                return (
+                  <Box
+                    key={inst.id}
+                    sx={{
+                      p: 2,
+                      // 💡 선택되면 테두리 색상과 배경색이 부드럽게 강조됩니다!
+                      border: isSelected
+                        ? "2px solid #6366f1"
+                        : "1px solid #eee",
+                      borderRadius: 2,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      bgcolor: isSelected
+                        ? "rgba(99, 102, 241, 0.05)"
+                        : "transparent",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Box>
+                      <Typography fontWeight="bold">
+                        {inst.name} 강사
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="primary"
+                          sx={{ ml: 1 }}
+                        >
+                          (적합도 {inst.match})
+                        </Typography>
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        {inst.status}
+                      </Typography>
+                    </Box>
+
+                    {/* 💡 선택 여부에 따라 버튼의 디자인과 텍스트가 바뀝니다 */}
+                    <Button
+                      variant={isSelected ? "contained" : "outlined"}
+                      color={isSelected ? "success" : "primary"}
+                      size="small"
+                      onClick={() =>
+                        setSelectedInstructor(isSelected ? "" : inst.id)
+                      } // 다시 누르면 취소도 가능!
+                      sx={{ minWidth: "80px" }}
+                    >
+                      {isSelected ? "선택됨 ✔" : "선택"}
+                    </Button>
+                  </Box>
+                );
+              })}
             </Stack>
           </Box>
         );

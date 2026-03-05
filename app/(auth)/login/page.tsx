@@ -21,8 +21,9 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      // 1. 백엔드 로그인 API 호출 (임시 포트 8080 사용, 실제 URL로 변경 필요!)
-      const response = await fetch("http://localhost:8080/auth/google", {
+      // 1. 백엔드 로그인 API 호출 (실제 URL로 변경 필요!)
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+      const response = await fetch(`${apiUrl}/auth/google`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -20,6 +20,7 @@ import {
 import {
   Dashboard,
   People,
+  Paid,
   Event,
   Receipt,
   Settings,
@@ -55,7 +56,8 @@ export default function AdminLayout({
       ],
     },
     { text: "Schedules", icon: <Event />, path: "/schedules" },
-    { text: "Settlement", icon: <Receipt />, path: "/settlement" },
+    { text: "Contracts", icon: <Receipt />, path: "/contracts" },
+    { text: "Settlements", icon: <Paid />, path: "/settlements" },
     { text: "Settings", icon: <Settings />, path: "/settings" },
   ];
 

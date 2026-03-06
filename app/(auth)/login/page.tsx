@@ -96,7 +96,7 @@ export default function LoginPage() {
           }}
         >
           <Typography variant="h2" fontWeight="bold" sx={{ mb: 2 }}>
-            SETTLY
+            free-b
           </Typography>
           <Typography variant="h5">
             스마트한 프리랜서 강사 관리 시스템

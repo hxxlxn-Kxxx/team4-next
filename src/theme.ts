@@ -5,7 +5,7 @@ import { createTheme } from "@mui/material/styles";
 const theme = createTheme({
   palette: {
     primary: {
-      main: "#6366f1", // Settly 메인 컬러 (Indigo)
+      main: "#6366f1", //  메인 컬러 (Indigo)
     },
     secondary: {
       main: "#1e293b",

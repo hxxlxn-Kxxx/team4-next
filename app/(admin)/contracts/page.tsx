@@ -28,6 +28,23 @@ import {
   VerifiedUser,
 } from "@mui/icons-material";
 
+// 백엔드 기준 ContractStatus enum
+type ContractStatus =
+  | "DRAFT"
+  | "SENT"
+  | "INSTRUCTOR_SIGNED"
+  | "FULLY_SIGNED"
+  | "VOID";
+
+// 백엔드 enum → 한국어 텍스트 매핑
+const CONTRACT_STATUS_MAP: Record<ContractStatus, string> = {
+  DRAFT: "초안",
+  SENT: "발송",
+  INSTRUCTOR_SIGNED: "열람",
+  FULLY_SIGNED: "서명완료",
+  VOID: "무효",
+};
+
 // 💡 기획서 4-1 반영: 계약 상태 옵션 [cite: 86, 87, 88, 89, 90]
 const STATUS_OPTIONS = ["전체", "초안", "발송", "열람", "서명완료"];
 
@@ -37,7 +54,7 @@ const MOCK_CONTRACTS = [
     id: "C-2603-01",
     name: "김철수",
     type: "정규 프리랜서",
-    status: "서명완료",
+    status: "FULLY_SIGNED" as ContractStatus,
     startDate: "2026-03-01",
     endDate: "2026-08-31",
   },
@@ -45,7 +62,7 @@ const MOCK_CONTRACTS = [
     id: "C-2603-02",
     name: "이영희",
     type: "단기 대강",
-    status: "열람",
+    status: "INSTRUCTOR_SIGNED" as ContractStatus,
     startDate: "2026-03-10",
     endDate: "2026-03-31",
   },
@@ -53,7 +70,7 @@ const MOCK_CONTRACTS = [
     id: "C-2603-03",
     name: "박지민",
     type: "정규 프리랜서",
-    status: "발송",
+    status: "SENT" as ContractStatus,
     startDate: "2026-04-01",
     endDate: "2026-09-30",
   },
@@ -61,7 +78,7 @@ const MOCK_CONTRACTS = [
     id: "C-2603-04",
     name: "강혜린",
     type: "정규 프리랜서",
-    status: "초안",
+    status: "DRAFT" as ContractStatus,
     startDate: "2026-03-15",
     endDate: "2026-09-14",
   },
@@ -73,16 +90,18 @@ export default function ContractsPage() {
   const [filterStatus, setFilterStatus] = useState("전체");
 
   // 상태별 칩 색상 지정 (전자계약 UX의 핵심!)
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: ContractStatus) => {
     switch (status) {
-      case "서명완료":
+      case "FULLY_SIGNED":
         return "success"; // 초록색 (안전) [cite: 90]
-      case "열람":
+      case "INSTRUCTOR_SIGNED":
         return "warning"; // 주황색 (진행중) [cite: 89]
-      case "발송":
+      case "SENT":
         return "info"; // 파란색 (대기중) [cite: 88]
-      case "초안":
+      case "DRAFT":
         return "default"; // 회색 (시작 전) [cite: 87]
+      case "VOID":
+        return "error"; // 빨간색 (무효)
       default:
         return "default";
     }
@@ -182,10 +201,12 @@ export default function ContractsPage() {
                 <TableCell align="center">{row.type}</TableCell>
                 <TableCell align="center">
                   <Chip
-                    label={row.status}
+                    label={CONTRACT_STATUS_MAP[row.status]}
                     color={getStatusColor(row.status) as any}
                     size="small"
-                    variant={row.status === "서명완료" ? "filled" : "outlined"}
+                    variant={
+                      row.status === "FULLY_SIGNED" ? "filled" : "outlined"
+                    }
                     sx={{ fontWeight: "bold" }}
                   />
                 </TableCell>
@@ -234,13 +255,13 @@ export default function ContractsPage() {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
               <VerifiedUser
                 color={
-                  selectedContract?.status === "서명완료"
+                  selectedContract?.status === "FULLY_SIGNED"
                     ? "success"
                     : "disabled"
                 }
               />
               <Typography variant="subtitle1" fontWeight="bold">
-                {selectedContract?.status}
+                {CONTRACT_STATUS_MAP[selectedContract?.status]}
               </Typography>
             </Box>
 
@@ -250,7 +271,7 @@ export default function ContractsPage() {
                   서명 시간
                 </Typography>
                 <Typography variant="body2" fontWeight="medium">
-                  {selectedContract?.status === "서명완료"
+                  {selectedContract?.status === "FULLY_SIGNED"
                     ? "2026-03-05 14:30"
                     : "-"}
                 </Typography>
@@ -260,7 +281,7 @@ export default function ContractsPage() {
                   서명 IP
                 </Typography>
                 <Typography variant="body2" fontWeight="medium">
-                  {selectedContract?.status === "서명완료"
+                  {selectedContract?.status === "FULLY_SIGNED"
                     ? "192.168.1.104"
                     : "-"}
                 </Typography>

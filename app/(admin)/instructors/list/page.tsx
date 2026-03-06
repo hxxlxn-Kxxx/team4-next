@@ -28,9 +28,17 @@ import {
   School,
 } from "@mui/icons-material";
 
+// 백엔드 기준 ContractStatus (참고)
+type ContractStatus =
+  | "DRAFT"
+  | "SENT"
+  | "INSTRUCTOR_SIGNED"
+  | "FULLY_SIGNED"
+  | "VOID";
+
+// NOTE: 프론트 로컬 상태 (실제 ContractStatus enum과 별개)
 const CONTRACT_STATUS = ["전체", "서명완료", "계약대기", "만료임박"];
 
-// 💡 임시 데이터 변경: 금액을 빼고 '출강 횟수(classCount)'를 넣었습니다!
 const MOCK_OPERATIONS = [
   {
     id: 1,

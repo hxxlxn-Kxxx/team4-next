@@ -28,6 +28,13 @@ interface AssignmentModalProps {
 
 const steps = ["날짜/시간", "장소 및 지도안", "강사 배정"];
 
+// 로컬 시간을 UTC ISO 8601으로 변환
+const convertToUTCISO8601 = (date: string, time: string): string => {
+  if (!date || !time) return "";
+  // date: "2026-03-05", time: "09:00" -> "2026-03-05T09:00:00Z"
+  return `${date}T${time}:00Z`;
+};
+
 const START_HOUR = 8;
 const END_HOUR = 22;
 
@@ -49,6 +56,7 @@ export default function AssignmentModal({
 }: AssignmentModalProps) {
   const [activeStep, setActiveStep] = useState(0);
 
+  const [lessonDate, setLessonDate] = useState(""); // 수업 날짜
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
 
@@ -72,13 +80,28 @@ export default function AssignmentModal({
 
   const handleNext = () => setActiveStep((prev) => prev + 1);
   const handleBack = () => setActiveStep((prev) => prev - 1);
-  const handleClose = () => {
+
+  const handleCloseModal = () => {
     setActiveStep(0);
+    setLessonDate("");
     setStartTime("09:00");
     setEndTime("11:00");
     setLocation("");
     setSelectedInstructor("");
     onClose();
+  };
+
+  const handleCreateLesson = () => {
+    // 수업 생성 로직 (백엔드 연동 시 API 호출)
+    const lessonData = {
+      startsAt: convertToUTCISO8601(lessonDate, startTime),
+      endsAt: convertToUTCISO8601(lessonDate, endTime),
+      location: location,
+      instructorId: selectedInstructor,
+    };
+    console.log("수업 생성 데이터 (UTC ISO 8601):", lessonData);
+    // TODO: API 호출 후 handleCloseModal() 실행
+    handleCloseModal();
   };
 
   const renderStepContent = (step: number) => {
@@ -98,6 +121,8 @@ export default function AssignmentModal({
                 type="date"
                 label="날짜"
                 InputLabelProps={{ shrink: true }}
+                value={lessonDate}
+                onChange={(e) => setLessonDate(e.target.value)}
                 fullWidth
                 required
               />
@@ -133,6 +158,23 @@ export default function AssignmentModal({
                   ))}
                 </TextField>
               </Stack>
+              {/* UTC 변환 미리보기 */}
+              {lessonDate && startTime && endTime && (
+                <Box sx={{ p: 2, bgcolor: "#f0f7ff", borderRadius: 1 }}>
+                  <Typography variant="caption" color="primary">
+                    UTC ISO 8601 형식:
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontFamily: "monospace", mt: 1 }}
+                  >
+                    시작: {convertToUTCISO8601(lessonDate, startTime)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                    종료: {convertToUTCISO8601(lessonDate, endTime)}
+                  </Typography>
+                </Box>
+              )}
             </Stack>
           </Box>
         );
@@ -325,7 +367,7 @@ export default function AssignmentModal({
         {renderStepContent(activeStep)}
       </DialogContent>
       <DialogActions sx={{ p: 3 }}>
-        <Button onClick={handleClose} color="inherit">
+        <Button onClick={handleCloseModal} color="inherit">
           취소
         </Button>
         <Box sx={{ flexGrow: 1 }} />
@@ -334,7 +376,7 @@ export default function AssignmentModal({
         </Button>
         {activeStep === steps.length - 1 ? (
           // 기획서에 명시된 '수업 생성' 버튼 [cite: 45]
-          <Button variant="contained" onClick={handleClose}>
+          <Button variant="contained" onClick={handleCreateLesson}>
             수업 생성
           </Button>
         ) : (

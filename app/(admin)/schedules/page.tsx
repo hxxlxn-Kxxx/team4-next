@@ -22,6 +22,29 @@ import {
 import { Add, Search } from "@mui/icons-material";
 import AssignmentModal from "@/src/components/AssignmentModal";
 
+// 백엔드 기준 Lesson/LessonRequest Status enum
+type LessonStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "CONTRACT_SIGNED"
+  | "UPDATED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED";
+
+type LessonRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+
+// 백엔드 enum → 프론트 한국어 매핑
+const LESSON_STATUS_MAP: Record<LessonStatus, string> = {
+  PENDING: "미배정",
+  ACCEPTED: "요청중",
+  CONTRACT_SIGNED: "확정",
+  UPDATED: "수정됨",
+  IN_PROGRESS: "진행중",
+  COMPLETED: "완료",
+  CANCELLED: "취소",
+};
+
 // 기획서 기반 상태 옵션
 const STATUS_OPTIONS = ["전체", "미배정", "요청중", "확정"];
 
@@ -52,13 +75,25 @@ export default function SchedulesPage() {
     setFilterStatus("전체");
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: LessonStatus | string) => {
     switch (status) {
+      case "CONTRACT_SIGNED":
       case "확정":
         return "success";
+      case "ACCEPTED":
       case "요청중":
         return "warning";
+      case "PENDING":
       case "미배정":
+        return "error";
+      case "IN_PROGRESS":
+      case "진행중":
+        return "primary";
+      case "COMPLETED":
+      case "완료":
+        return "success";
+      case "CANCELLED":
+      case "취소":
         return "error";
       default:
         return "default";

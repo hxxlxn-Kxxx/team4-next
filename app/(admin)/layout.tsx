@@ -18,6 +18,7 @@ import {
   Collapse,
 } from "@mui/material";
 import {
+  ChatBubble,
   Dashboard,
   People,
   Paid,
@@ -30,6 +31,7 @@ import {
   ExpandMore,
 } from "@mui/icons-material";
 import { useRouter, usePathname } from "next/navigation";
+import ChatDrawer from "@/src/components/ChatDrawer";
 
 const drawerWidth = 240;
 
@@ -42,6 +44,7 @@ export default function AdminLayout({
   const pathname = usePathname();
 
   const [openInstructors, setOpenInstructors] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const menuItems = [
     { text: "Dashboard", icon: <Dashboard />, path: "/dashboard" },
@@ -79,9 +82,15 @@ export default function AdminLayout({
           <Typography variant="h6" fontWeight="bold">
             free-b Admin
           </Typography>
+          {/* 상단 우측 아이콘 그룹 */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <IconButton>
               <Search />
+            </IconButton>
+            <IconButton onClick={() => setIsChatOpen(true)}>
+              <Badge badgeContent={2} color="error">
+                <ChatBubble />
+              </Badge>
             </IconButton>
             <IconButton>
               <Badge badgeContent={3} color="error">
@@ -221,6 +230,7 @@ export default function AdminLayout({
               );
             })}
           </List>
+          <ChatDrawer open={isChatOpen} onClose={() => setIsChatOpen(false)} />
         </Box>
       </Drawer>
 

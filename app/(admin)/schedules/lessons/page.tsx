@@ -66,6 +66,8 @@ export default function ClassManagementPage() {
 
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [classes, setClasses] = useState<any[]>([]);
+  const [availableInstructors, setAvailableInstructors] = useState<any[]>([]);
+  const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
 
   const router = useRouter();
 
@@ -96,10 +98,6 @@ export default function ClassManagementPage() {
     }
   };
 
-  useEffect(() => {
-    fetchLessons();
-  }, [filterStatus]);
-
   const [formData, setFormData] = useState({
     lectureTitle: "",
     startsAt: "",
@@ -111,7 +109,44 @@ export default function ClassManagementPage() {
     guideNotionUrl: "",
     lessonDetails: "",
     deliveryNotes: "",
+    instructorId: "",
   });
+
+  useEffect(() => {
+    const fetchInstructors = async () => {
+      // 시작/종료 시간이 모두 있고, 유효한 날짜일 때만 작동
+      if (!formData.startsAt || !formData.endsAt) return;
+      const start = new Date(formData.startsAt);
+      const end = new Date(formData.endsAt);
+      if (start >= end) return;
+
+      setIsFetchingInstructors(true);
+      try {
+        const token = localStorage.getItem("accessToken");
+        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+        const startUtc = start.toISOString();
+        const endUtc = end.toISOString();
+
+        const response = await fetch(
+          `${apiUrl}/lessons/available-instructors?startsAt=${startUtc}&endsAt=${endUtc}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        if (!response.ok) throw new Error("가용 강사 조회 실패");
+
+        const data = await response.json();
+        setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
+      } catch (error) {
+        console.error("강사 조회 에러:", error);
+        setAvailableInstructors([]);
+      } finally {
+        setIsFetchingInstructors(false);
+      }
+    };
+
+    fetchInstructors();
+  }, [formData.startsAt, formData.endsAt]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -148,7 +183,7 @@ export default function ClassManagementPage() {
         endsAt: new Date(formData.endsAt).toISOString(),
         payAmount: Number(formData.payAmount),
         studentCount: Number(formData.studentCount),
-        classStatus: "PENDING", // 백엔드 Enum 명세 강제
+        classStatus: formData.instructorId ? "SCHEDULED" : "PENDING",
       };
 
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -188,8 +223,8 @@ export default function ClassManagementPage() {
         guideNotionUrl: "",
         lessonDetails: "",
         deliveryNotes: "",
+        instructorId: "",
       });
-
       fetchLessons();
 
       // 실제 연동 시 여기서 목록 갱신 API(GET /lessons)를 다시 호출합니다.
@@ -366,7 +401,7 @@ export default function ClassManagementPage() {
 
           <Box sx={{ p: 4, flexGrow: 1, overflowY: "auto" }}>
             <Grid container spacing={3}>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   label="수업명 (lectureTitle)"
                   name="lectureTitle"
@@ -376,7 +411,7 @@ export default function ClassManagementPage() {
                   required
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   type="datetime-local"
                   label="시작 일시 (startsAt)"
@@ -393,7 +428,7 @@ export default function ClassManagementPage() {
                   }
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   type="datetime-local"
                   label="종료 일시 (endsAt)"
@@ -417,7 +452,39 @@ export default function ClassManagementPage() {
                   }
                 />
               </Grid>
-              <Grid item xs={6}>
+
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  select
+                  label="담당 강사 배정 (선택 사항)"
+                  name="instructorId"
+                  value={formData.instructorId}
+                  onChange={handleChange}
+                  fullWidth
+                  // 시간이 유효하지 않거나 불러오는 중이면 선택 불가능
+                  disabled={!isDateValid || isFetchingInstructors}
+                  helperText={
+                    !formData.startsAt || !formData.endsAt
+                      ? "시작 및 종료 시간을 먼저 입력해주세요."
+                      : isFetchingInstructors
+                        ? "해당 시간에 가능한 강사를 찾고 있습니다..."
+                        : "배정할 강사를 선택해주세요. (미선택 시 '강사 대기' 상태로 등록됩니다.)"
+                  }
+                >
+                  <MenuItem value="">
+                    <em>미배정 (나중에 배정하기)</em>
+                  </MenuItem>
+                  {availableInstructors.map((inst) => (
+                    <MenuItem
+                      key={inst.instructorId || inst.id}
+                      value={inst.instructorId || inst.id}
+                    >
+                      {inst.instructorName || inst.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   type="number"
                   label="지급액 (payAmount)"
@@ -433,7 +500,7 @@ export default function ClassManagementPage() {
                   }}
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   type="number"
                   label="학생 수 (studentCount)"
@@ -449,7 +516,7 @@ export default function ClassManagementPage() {
                   }}
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   label="지역 (region)"
                   name="region"
@@ -459,7 +526,7 @@ export default function ClassManagementPage() {
                   required
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   label="박물관/장소 (museum)"
                   name="museum"
@@ -469,7 +536,7 @@ export default function ClassManagementPage() {
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   type="url"
                   label="가이드 노션 링크 (guideNotionUrl)"
@@ -481,7 +548,7 @@ export default function ClassManagementPage() {
                   placeholder="https://notion.so/..."
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   label="수업 상세 내용 (lessonDetails)"
                   name="lessonDetails"
@@ -493,7 +560,7 @@ export default function ClassManagementPage() {
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   label="전달 사항 (deliveryNotes)"
                   name="deliveryNotes"

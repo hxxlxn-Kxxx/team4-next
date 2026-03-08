@@ -118,7 +118,7 @@ export default function ClassDetailPage() {
       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => router.push("/schedules/classes")}
+          onClick={() => router.back()}
           sx={{ mr: 2 }}
         >
           목록
@@ -160,7 +160,7 @@ export default function ClassDetailPage() {
         <Divider sx={{ mb: 4 }} />
 
         <Grid container spacing={4}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Stack spacing={3}>
               <Box>
                 <Typography
@@ -210,7 +210,7 @@ export default function ClassDetailPage() {
             </Stack>
           </Grid>
 
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Stack spacing={3}>
               <Box>
                 <Typography

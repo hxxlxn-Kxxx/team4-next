@@ -23,6 +23,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { Add, Search } from "@mui/icons-material";
+import { useRouter } from "next/navigation";
 
 const CLASS_STATUS_MAP: Record<string, string> = {
   SCHEDULED: "배정 완료",
@@ -65,6 +66,8 @@ export default function ClassManagementPage() {
 
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [classes, setClasses] = useState<any[]>([]);
+
+  const router = useRouter();
 
   const fetchLessons = async () => {
     setIsLoadingList(true);
@@ -296,7 +299,14 @@ export default function ClassManagementPage() {
               </TableRow>
             ) : (
               classes.map((row) => (
-                <TableRow key={row.id || row.classId || row.lectureTitle} hover>
+                <TableRow
+                  key={row.id || row.classId || row.lectureTitle}
+                  hover
+                  onClick={() =>
+                    router.push(`/schedules/lessons/${row.id || row.lessonId}`)
+                  }
+                  sx={{ cursor: "pointer" }}
+                >
                   <TableCell align="center" sx={{ fontWeight: "medium" }}>
                     {row.lectureTitle}
                   </TableCell>

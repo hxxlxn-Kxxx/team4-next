@@ -8,56 +8,70 @@ import {
   Button,
   Avatar,
   CssBaseline,
-  Divider,
   CircularProgress,
+  Alert,
+  Stack,
+  Chip,
 } from "@mui/material";
-import { LockOutlined, Google } from "@mui/icons-material";
+import { LockOutlined, AdminPanelSettings } from "@mui/icons-material";
 import { useRouter } from "next/navigation";
+
+const DEMO_ADMINS = [
+  {
+    name: "김도윤 관리자",
+    email: "admin1@museum-demo.kr",
+    description: "메인 발표 계정",
+  },
+  {
+    name: "박서연 관리자",
+    email: "admin2@museum-demo.kr",
+    description: "보조 시나리오 확인용",
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false); // 로딩 상태 추가
+  const [loadingEmail, setLoadingEmail] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
+  const handleDemoLogin = async (email: string) => {
+    setLoadingEmail(email);
+    setErrorMessage("");
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-      const response = await fetch(`${apiUrl}/auth/google`, {
+      const response = await fetch(`${apiUrl}/auth/demo-login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ idToken: "sample" }), // 현재는 Mock 데이터 전송
+        body: JSON.stringify({
+          channel: "web",
+          email,
+        }),
       });
 
       const data = await response.json();
 
-      // 2. 응답 상태에 따른 처리
       if (response.ok) {
-        // 성공 시 명세서대로 accessToken과 userInfo를 로컬 스토리지에 저장
         localStorage.setItem("accessToken", data.accessToken);
         if (data.refreshToken)
           localStorage.setItem("refreshToken", data.refreshToken);
         localStorage.setItem("user", JSON.stringify(data.user));
 
-        console.log("로그인 성공! 환영합니다,", data.user.name);
-
-        // 3. 대시보드로 이동
         router.push("/dashboard");
       } else {
-        // 명세서의 에러 응답 포맷({ code, message, ... }) 처리
-        alert(
-          `로그인 실패: ${data.message || "알 수 없는 오류가 발생했습니다."}`,
+        setErrorMessage(
+          data.message || "데모 로그인에 실패했습니다. 계정 상태를 확인해주세요.",
         );
       }
     } catch (error) {
       console.error("API 통신 에러:", error);
-      alert(
-        "서버와 연결할 수 없습니다. CORS 이슈이거나 서버가 꺼져있는지 확인해주세요!",
+      setErrorMessage(
+        "서버와 연결할 수 없습니다. 백엔드가 실행 중인지 확인해주세요.",
       );
     } finally {
-      setIsLoading(false);
+      setLoadingEmail(null);
     }
   };
 
@@ -105,7 +119,7 @@ export default function LoginPage() {
         </Box>
       </Box>
 
-      {/* 2. 오른쪽 구글 로그인 영역 (40%) */}
+      {/* 2. 오른쪽 데모 로그인 영역 (40%) */}
       <Box
         component={Paper}
         elevation={6}
@@ -143,68 +157,89 @@ export default function LoginPage() {
           <Typography
             variant="body2"
             color="textSecondary"
-            sx={{ mb: 5, textAlign: "center" }}
+            sx={{ mb: 4, textAlign: "center" }}
           >
-            SETTLY 운영 관리를 위해
+            발표용 데모 계정을 선택하면
             <br />
-            구글 워크스페이스 계정으로 로그인해주세요.
+            바로 관리자 화면으로 진입합니다.
           </Typography>
 
-          <Box sx={{ width: "100%" }}>
-            {/* 구글 로그인 전용 버튼 */}
-            <Button
-              fullWidth
-              variant="outlined"
-              size="large"
-              startIcon={
-                isLoading ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : (
-                  <Google sx={{ color: "#DB4437" }} />
-                )
-              }
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              sx={{
-                py: 1.5,
-                borderRadius: 2,
-                fontWeight: "bold",
-                color: "#3c4043",
-                borderColor: "#dadce0",
-                bgcolor: "white",
-                "&:hover": {
-                  bgcolor: "#f8f9fa",
-                  borderColor: "#dadce0",
-                },
-              }}
-            >
-              {isLoading ? "인증 진행 중..." : "Google 계정으로 계속하기"}
-            </Button>
+          <Stack spacing={2} sx={{ width: "100%" }}>
+            {DEMO_ADMINS.map((admin) => {
+              const isLoading = loadingEmail === admin.email;
 
-            <Divider sx={{ my: 4 }}>
-              <Typography variant="body2" color="textSecondary">
-                또는
-              </Typography>
-            </Divider>
+              return (
+                <Button
+                  key={admin.email}
+                  fullWidth
+                  variant="outlined"
+                  size="large"
+                  startIcon={
+                    isLoading ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      <AdminPanelSettings color="primary" />
+                    )
+                  }
+                  onClick={() => {
+                    void handleDemoLogin(admin.email);
+                  }}
+                  disabled={loadingEmail !== null}
+                  sx={{
+                    alignItems: "flex-start",
+                    justifyContent: "flex-start",
+                    py: 2,
+                    px: 2.5,
+                    borderRadius: 3,
+                    textAlign: "left",
+                    color: "text.primary",
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                    "&:hover": {
+                      bgcolor: "#f8fafc",
+                      borderColor: "primary.main",
+                    },
+                  }}
+                >
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {admin.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {admin.email}
+                    </Typography>
+                    <Chip
+                      label={admin.description}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                      sx={{ width: "fit-content" }}
+                    />
+                  </Box>
+                </Button>
+              );
+            })}
 
-            <Button
-              fullWidth
-              variant="text"
-              onClick={() => alert("다른 이메일 로그인 기능은 준비 중입니다.")}
-              sx={{ color: "text.secondary" }}
-            >
-              기타 이메일로 로그인
-            </Button>
+            {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
             <Typography
               variant="body2"
               color="textSecondary"
               align="center"
-              sx={{ mt: 5 }}
+              sx={{ mt: 2 }}
+            >
+              백엔드 서버와 seed 데이터가 실행 중이어야 로그인할 수 있습니다.
+            </Typography>
+
+            <Typography
+              variant="body2"
+              color="textSecondary"
+              align="center"
+              sx={{ mt: 2 }}
             >
               © 2026 Settly Corp. All rights reserved.
             </Typography>
-          </Box>
+          </Stack>
         </Box>
       </Box>
     </Box>

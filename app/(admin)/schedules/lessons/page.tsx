@@ -37,6 +37,9 @@ type LessonRow = {
   startsAt: string;
   status: LessonStatus;
   requestedInstructorId?: string | null;
+  requestedInstructor?: { 
+    name: string;
+  } | null;
 };
 
 type AvailableInstructor = {
@@ -405,8 +408,8 @@ export default function ClassManagementPage() {
                   </TableCell>
                   <TableCell align="center">{row.museum || row.venueName || "-"}</TableCell>
                   <TableCell align="center">
-                    {row.requestedInstructorId ? row.requestedInstructorId : "미배정"}
-                  </TableCell>
+  {row.requestedInstructor?.name || "미배정"}
+</TableCell>
                   <TableCell align="center">{formatUtcToLocal(row.startsAt)}</TableCell>
                   <TableCell align="center">
                     <AtomBadge

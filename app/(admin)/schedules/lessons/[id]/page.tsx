@@ -14,6 +14,14 @@ import {
   Alert,
   Stack,
   Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import {
   ArrowBack,
@@ -47,38 +55,100 @@ export default function ClassDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchLessonDetail = async () => {
-      try {
-        const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [availableInstructors, setAvailableInstructors] = useState<any[]>([]);
+  const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
+  const [selectedInstructorId, setSelectedInstructorId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
 
-        const response = await fetch(`${apiUrl}/lessons/${id}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
+  const fetchLessonDetail = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+      const response = await fetch(`${apiUrl}/lessons/${id}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        if (!response.ok) {
-          if (response.status === 404)
-            throw new Error("존재하지 않거나 삭제된 수업입니다.");
-          throw new Error(`데이터를 불러오지 못했습니다. (${response.status})`);
-        }
-
-        const data = await response.json();
-        setLesson(data.data || data);
-      } catch (err: any) {
-        console.error("상세 조회 에러:", err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        if (response.status === 404)
+          throw new Error("존재하지 않거나 삭제된 수업입니다.");
+        throw new Error(`데이터를 불러오지 못했습니다. (${response.status})`);
       }
-    };
+      const data = await response.json();
+      setLesson(data.data || data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (id) fetchLessonDetail();
   }, [id]);
+
+  const handleOpenAssignModal = async () => {
+    setIsAssignModalOpen(true);
+    setIsFetchingInstructors(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      const startUtc = new Date(lesson.startsAt).toISOString();
+      const endUtc = new Date(lesson.endsAt).toISOString();
+
+      const response = await fetch(
+        `${apiUrl}/lessons/available-instructors?startsAt=${startUtc}&endsAt=${endUtc}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!response.ok)
+        throw new Error("가용 강사 목록을 불러오지 못했습니다.");
+
+      const data = await response.json();
+      setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message);
+    } finally {
+      setIsFetchingInstructors(false);
+    }
+  };
+
+  const handleAssignInstructor = async () => {
+    if (!selectedInstructorId) return;
+    setIsAssigning(true);
+
+    try {
+      const token = localStorage.getItem("accessToken");
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      const response = await fetch(`${apiUrl}/lessons/${id}/assign`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ instructorId: selectedInstructorId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "강사 배정 요청에 실패했습니다.");
+      }
+
+      alert("강사에게 배정 요청을 성공적으로 보냈습니다!");
+      setIsAssignModalOpen(false);
+      setSelectedInstructorId("");
+
+      fetchLessonDetail();
+    } catch (err: any) {
+      alert(`배정 요청 실패: ${err.message}`);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -203,9 +273,18 @@ export default function ClassDetailPage() {
                 >
                   <Person fontSize="small" /> 담당 강사
                 </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {lesson.instructorName || "현재 미배정 상태입니다."}
-                </Typography>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Typography variant="body1" fontWeight="medium">
+                    {lesson.instructorName || "현재 미배정 상태입니다."}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleOpenAssignModal}
+                  >
+                    강사 배정하기
+                  </Button>
+                </Box>
               </Box>
             </Stack>
           </Grid>
@@ -308,6 +387,66 @@ export default function ClassDetailPage() {
           {lesson.deliveryNotes || "등록된 전달 사항이 없습니다."}
         </Box>
       </Paper>
+      <Dialog
+        open={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle fontWeight="bold">강사 배정 요청</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+            현재 수업 시간에 배정 가능한 강사 목록입니다. 강사를 선택하여 수업을
+            요청하세요.
+          </Typography>
+
+          {isFetchingInstructors ? (
+            <Box display="flex" justifyContent="center" py={3}>
+              <CircularProgress size={30} />
+            </Box>
+          ) : (
+            <FormControl fullWidth>
+              <InputLabel>배정할 강사 선택</InputLabel>
+              <Select
+                value={selectedInstructorId}
+                label="배정할 강사 선택"
+                onChange={(e) => setSelectedInstructorId(e.target.value)}
+              >
+                {availableInstructors.length === 0 ? (
+                  <MenuItem disabled value="">
+                    <em>해당 시간에 가능한 강사가 없습니다.</em>
+                  </MenuItem>
+                ) : (
+                  availableInstructors.map((inst) => (
+                    <MenuItem
+                      key={inst.instructorId || inst.id}
+                      value={inst.instructorId || inst.id}
+                    >
+                      {inst.instructorName || inst.name}
+                    </MenuItem>
+                  ))
+                )}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setIsAssignModalOpen(false)}
+            color="inherit"
+            disabled={isAssigning}
+          >
+            취소
+          </Button>
+          <Button
+            onClick={handleAssignInstructor}
+            variant="contained"
+            disabled={!selectedInstructorId || isAssigning}
+          >
+            {isAssigning ? "요청 중..." : "요청 보내기"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

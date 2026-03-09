@@ -104,7 +104,7 @@ export default function ClassDetailPage() {
   const [selectedInstructorId, setSelectedInstructorId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
 
-  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
@@ -255,7 +255,11 @@ export default function ClassDetailPage() {
       lessonDetails: lesson.lessonDetails || "",
       deliveryNotes: lesson.deliveryNotes || "",
     });
-    setIsEditDrawerOpen(true);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -291,7 +295,7 @@ export default function ClassDetailPage() {
       if (!response.ok) throw new Error("수업 수정에 실패했습니다.");
 
       alert("정보가 수정되었습니다.");
-      setIsEditDrawerOpen(false);
+      setIsEditing(false);
       fetchLessonDetail();
     } catch (err: unknown) {
       alert(`수정 실패: ${getErrorMessage(err)}`);
@@ -336,66 +340,64 @@ export default function ClassDetailPage() {
   const currentStatus = lesson.classStatus || lesson.status || "";
 
   return (
-    <Box sx={{ maxWidth: 900, mx: "auto" }}>
+    <Box sx={{ maxWidth: 900, mx: "auto", pb: 10 }}>
       {/* 상단 뒤로가기 & 헤더 */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => router.back()}
-          sx={{ mr: 2 }}
-        >
+        <Button startIcon={<ArrowBack />} onClick={() => router.back()} sx={{ mr: 2 }} disabled={isEditing}>
           목록
         </Button>
         <Typography variant="h5" fontWeight="bold" sx={{ flexGrow: 1 }}>
           수업 상세 정보
         </Typography>
+        
         {!isCanceled && (
           <Stack direction="row" spacing={1} sx={{ mr: 2 }}>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<Edit />}
-              onClick={handleOpenEdit}
-            >
-              수정
-            </Button>
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<Block />}
-              onClick={handleCancelLesson}
-              disabled={isCanceling}
-            >
-              {isCanceling ? "취소 중..." : "취소"}
-            </Button>
+            {isEditing ? (
+              <>
+                <Button variant="outlined" color="inherit" onClick={handleCancelEdit} disabled={isUpdating}>취소</Button>
+                <Button variant="contained" color="primary" onClick={handleUpdateLesson} disabled={isUpdating}>
+                  {isUpdating ? "저장 중..." : "저장 완료"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outlined" color="primary" startIcon={<Edit />} onClick={handleOpenEdit}>수정</Button>
+                <Button variant="outlined" color="error" startIcon={<Block />} onClick={handleCancelLesson} disabled={isCanceling}>
+                  {isCanceling ? "취소 중..." : "수업 취소"}
+                </Button>
+              </>
+            )}
           </Stack>
         )}
         <Chip
-          label={
-            CLASS_STATUS_MAP[currentStatus] || currentStatus
-          }
-          color={
-            ["SCHEDULED", "COMPLETED"].includes(currentStatus)
-              ? "primary"
-              : "warning"
-          }
+          label={CLASS_STATUS_MAP[currentStatus] || currentStatus}
+          color={["SCHEDULED", "COMPLETED"].includes(currentStatus) ? "primary" : "warning"}
           sx={{ fontWeight: "bold", fontSize: "1rem", py: 2.5, px: 1 }}
         />
       </Box>
 
       {/* 기본 정보 카드 */}
       <Paper sx={{ p: 4, borderRadius: 3, mb: 3 }}>
-        <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
-          {lesson.lectureTitle}
-        </Typography>
-        <Typography
-          variant="subtitle1"
-          color="textSecondary"
-          sx={{ mb: 4, display: "flex", alignItems: "center", gap: 1 }}
-        >
-          <LocationOn fontSize="small" /> {lesson.region}{" "}
-          {lesson.museum && `> ${lesson.museum}`}
-        </Typography>
+        {isEditing ? (
+          <Box sx={{ mb: 3 }}>
+            <TextField label="수업명" name="lectureTitle" value={editFormData.lectureTitle} onChange={handleEditChange} fullWidth sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6 }}>
+                <TextField label="지역" name="region" value={editFormData.region} onChange={handleEditChange} fullWidth />
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <TextField label="박물관/장소" name="museum" value={editFormData.museum} onChange={handleEditChange} fullWidth />
+              </Grid>
+            </Grid>
+          </Box>
+        ) : (
+          <>
+            <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>{lesson.lectureTitle}</Typography>
+            <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 4, display: "flex", alignItems: "center", gap: 1 }}>
+              <LocationOn fontSize="small" /> {lesson.region} {lesson.museum && `> ${lesson.museum}`}
+            </Typography>
+          </>
+        )}
 
         <Divider sx={{ mb: 4 }} />
 
@@ -403,57 +405,22 @@ export default function ClassDetailPage() {
           <Grid size={{ xs: 12, sm: 6 }}>
             <Stack spacing={3}>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <CalendarMonth fontSize="small" /> 수업 시작 시간
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {formatUtcToLocal(lesson.startsAt)}
-                </Typography>
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 시작 시간</Typography>
+                {isEditing ? <TextField type="datetime-local" name="startsAt" value={editFormData.startsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.startsAt)}</Typography>}
               </Box>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <CalendarMonth fontSize="small" /> 수업 종료 시간
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {formatUtcToLocal(lesson.endsAt)}
-                </Typography>
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 종료 시간</Typography>
+                {isEditing ? <TextField type="datetime-local" name="endsAt" value={editFormData.endsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.endsAt)}</Typography>}
               </Box>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <Person fontSize="small" /> 담당 강사
-                </Typography>
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Person fontSize="small" /> 담당 강사</Typography>
                 <Box display="flex" alignItems="center" gap={2}>
-                  <Typography variant="body1" fontWeight="medium">
-                    {lesson.instructorName || "현재 미배정 상태입니다."}
+                  <Typography variant="body1" fontWeight="medium" color={isEditing ? "textSecondary" : "textPrimary"}>
+                    {lesson.instructorName || "현재 미배정 상태입니다."} {isEditing && "(강사 변경은 배정 기능을 이용해주세요)"}
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={handleOpenAssignModal}
-                  >
-                    강사 배정하기
-                  </Button>
+                  {!isCanceled && !isEditing && (
+                    <Button variant="outlined" size="small" onClick={handleOpenAssignModal}>강사 배정하기</Button>
+                  )}
                 </Box>
               </Box>
             </Stack>
@@ -462,62 +429,16 @@ export default function ClassDetailPage() {
           <Grid size={{ xs: 12, sm: 6 }}>
             <Stack spacing={3}>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <AttachMoney fontSize="small" /> 강사 지급액
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {lesson.payAmount
-                    ? lesson.payAmount.toLocaleString() + "원"
-                    : "미정"}
-                </Typography>
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><AttachMoney fontSize="small" /> 강사 지급액</Typography>
+                {isEditing ? <TextField type="number" name="payAmount" value={editFormData.payAmount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">원</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.payAmount ? lesson.payAmount.toLocaleString() + "원" : "미정"}</Typography>}
               </Box>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <People fontSize="small" /> 배정 학생 수
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {lesson.studentCount}명
-                </Typography>
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><People fontSize="small" /> 배정 학생 수</Typography>
+                {isEditing ? <TextField type="number" name="studentCount" value={editFormData.studentCount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">명</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.studentCount}명</Typography>}
               </Box>
               <Box>
-                <Typography
-                  variant="caption"
-                  color="textSecondary"
-                  display="flex"
-                  alignItems="center"
-                  gap={0.5}
-                  mb={0.5}
-                >
-                  <Description fontSize="small" /> 가이드 노션
-                </Typography>
-                {lesson.guideNotionUrl ? (
-                  <Link
-                    href={lesson.guideNotionUrl}
-                    target="_blank"
-                    underline="hover"
-                    color="primary"
-                  >
-                    지도안 열기
-                  </Link>
-                ) : (
-                  <Typography variant="body1" color="textSecondary">
-                    등록된 링크가 없습니다.
-                  </Typography>
-                )}
+                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Description fontSize="small" /> 가이드 노션</Typography>
+                {isEditing ? <TextField type="url" name="guideNotionUrl" value={editFormData.guideNotionUrl} onChange={handleEditChange} fullWidth size="small" /> : (lesson.guideNotionUrl ? <Link href={lesson.guideNotionUrl} target="_blank" underline="hover" color="primary">지도안 열기</Link> : <Typography variant="body1" color="textSecondary">등록된 링크가 없습니다.</Typography>)}
               </Box>
             </Stack>
           </Grid>
@@ -526,242 +447,37 @@ export default function ClassDetailPage() {
 
       {/* 상세 내용 및 메모 카드 */}
       <Paper sx={{ p: 4, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
-          수업 상세 내용
-        </Typography>
-        <Box
-          sx={{
-            p: 2,
-            bgcolor: "#f8f9fa",
-            borderRadius: 2,
-            mb: 4,
-            minHeight: 80,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {lesson.lessonDetails || "등록된 상세 내용이 없습니다."}
-        </Box>
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>수업 상세 내용</Typography>
+        {isEditing ? (
+          <TextField name="lessonDetails" value={editFormData.lessonDetails} onChange={handleEditChange} fullWidth multiline rows={4} sx={{ mb: 4 }} />
+        ) : (
+          <Box sx={{ p: 2, bgcolor: "#f8f9fa", borderRadius: 2, mb: 4, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.lessonDetails || "등록된 상세 내용이 없습니다."}</Box>
+        )}
 
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
-          전달 사항
-        </Typography>
-        <Box
-          sx={{
-            p: 2,
-            bgcolor: "#fff4e5",
-            borderRadius: 2,
-            minHeight: 80,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {lesson.deliveryNotes || "등록된 전달 사항이 없습니다."}
-        </Box>
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>전달 사항</Typography>
+        {isEditing ? (
+          <TextField name="deliveryNotes" value={editFormData.deliveryNotes} onChange={handleEditChange} fullWidth multiline rows={3} />
+        ) : (
+          <Box sx={{ p: 2, bgcolor: "#fff4e5", borderRadius: 2, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.deliveryNotes || "등록된 전달 사항이 없습니다."}</Box>
+        )}
       </Paper>
-      <Drawer
-        anchor="right"
-        open={isEditDrawerOpen}
-        onClose={() => setIsEditDrawerOpen(false)}
-      >
-        <Box
-          sx={{
-            width: 500,
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-          }}
-        >
-          <Box sx={{ p: 3, bgcolor: "#1976d2", color: "white" }}>
-            <Typography variant="h6" fontWeight="bold">
-              수업 정보 수정
-            </Typography>
-          </Box>
-          <Divider />
-          <Box sx={{ p: 4, flexGrow: 1, overflowY: "auto" }}>
-            <Grid container spacing={3}>
-              {/* 수정 폼 필드들 */}
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="수업명"
-                  name="lectureTitle"
-                  value={editFormData.lectureTitle}
-                  onChange={handleEditChange}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  type="datetime-local"
-                  label="시작 일시"
-                  name="startsAt"
-                  value={editFormData.startsAt}
-                  onChange={handleEditChange}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  type="datetime-local"
-                  label="종료 일시"
-                  name="endsAt"
-                  value={editFormData.endsAt}
-                  onChange={handleEditChange}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  type="number"
-                  label="지급액"
-                  name="payAmount"
-                  value={editFormData.payAmount}
-                  onChange={handleEditChange}
-                  fullWidth
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">원</InputAdornment>
-                    ),
-                  }}
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  type="number"
-                  label="학생 수"
-                  name="studentCount"
-                  value={editFormData.studentCount}
-                  onChange={handleEditChange}
-                  fullWidth
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">명</InputAdornment>
-                    ),
-                  }}
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  label="지역"
-                  name="region"
-                  value={editFormData.region}
-                  onChange={handleEditChange}
-                  fullWidth
-                />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <TextField
-                  label="박물관/장소"
-                  name="museum"
-                  value={editFormData.museum}
-                  onChange={handleEditChange}
-                  fullWidth
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  type="url"
-                  label="가이드 노션 링크"
-                  name="guideNotionUrl"
-                  value={editFormData.guideNotionUrl}
-                  onChange={handleEditChange}
-                  fullWidth
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="수업 상세 내용"
-                  name="lessonDetails"
-                  value={editFormData.lessonDetails}
-                  onChange={handleEditChange}
-                  fullWidth
-                  multiline
-                  rows={3}
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="전달 사항"
-                  name="deliveryNotes"
-                  value={editFormData.deliveryNotes}
-                  onChange={handleEditChange}
-                  fullWidth
-                  multiline
-                  rows={2}
-                />
-              </Grid>
-            </Grid>
-          </Box>
-          <Box
-            sx={{
-              p: 3,
-              borderTop: "1px solid #eee",
-              bgcolor: "#f8f9fa",
-              display: "flex",
-              gap: 2,
-            }}
-          >
-            <Button
-              variant="outlined"
-              color="inherit"
-              fullWidth
-              onClick={() => setIsEditDrawerOpen(false)}
-              disabled={isUpdating}
-            >
-              취소
-            </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={handleUpdateLesson}
-              disabled={isUpdating}
-            >
-              {isUpdating ? "수정 중..." : "수정 완료"}
-            </Button>
-          </Box>
-        </Box>
-      </Drawer>
-      <Dialog
-        open={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
-        fullWidth
-        maxWidth="sm"
-      >
+
+      {/* 강사 배정 모달 */}
+      <Dialog open={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle fontWeight="bold">강사 배정 요청</DialogTitle>
         <DialogContent dividers>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            현재 수업 시간에 배정 가능한 강사 목록입니다. 강사를 선택하여 수업을
-            요청하세요.
-          </Typography>
-
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>현재 수업 시간에 배정 가능한 강사 목록입니다. 강사를 선택하여 수업을 요청하세요.</Typography>
           {isFetchingInstructors ? (
-            <Box display="flex" justifyContent="center" py={3}>
-              <CircularProgress size={30} />
-            </Box>
+            <Box display="flex" justifyContent="center" py={3}><CircularProgress size={30} /></Box>
           ) : (
             <FormControl fullWidth>
               <InputLabel>배정할 강사 선택</InputLabel>
-              <Select
-                value={selectedInstructorId}
-                label="배정할 강사 선택"
-                onChange={(e) => setSelectedInstructorId(e.target.value)}
-              >
+              <Select value={selectedInstructorId} label="배정할 강사 선택" onChange={(e) => setSelectedInstructorId(e.target.value)}>
                 {availableInstructors.length === 0 ? (
-                  <MenuItem disabled value="">
-                    <em>해당 시간에 가능한 강사가 없습니다.</em>
-                  </MenuItem>
+                  <MenuItem disabled value=""><em>해당 시간에 가능한 강사가 없습니다.</em></MenuItem>
                 ) : (
                   availableInstructors.map((inst) => (
-                    <MenuItem
-                      key={inst.instructorId || inst.id}
-                      value={inst.instructorId || inst.id}
-                    >
-                      {inst.instructorName || inst.name}
-                    </MenuItem>
+                    <MenuItem key={inst.instructorId || inst.id} value={inst.instructorId || inst.id}>{inst.instructorName || inst.name}</MenuItem>
                   ))
                 )}
               </Select>
@@ -769,20 +485,8 @@ export default function ClassDetailPage() {
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={() => setIsAssignModalOpen(false)}
-            color="inherit"
-            disabled={isAssigning}
-          >
-            취소
-          </Button>
-          <Button
-            onClick={handleAssignInstructor}
-            variant="contained"
-            disabled={!selectedInstructorId || isAssigning}
-          >
-            {isAssigning ? "요청 중..." : "요청 보내기"}
-          </Button>
+          <Button onClick={() => setIsAssignModalOpen(false)} color="inherit" disabled={isAssigning}>취소</Button>
+          <Button onClick={handleAssignInstructor} variant="contained" disabled={!selectedInstructorId || isAssigning}>{isAssigning ? "요청 중..." : "요청 보내기"}</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -313,7 +313,7 @@ export default function ClassManagementPage() {
         title="수업 관리"
         description="실제 수업 목록과 신규 등록 흐름을 같은 운영 패턴으로 관리합니다."
         action={
-          <AtomButton startIcon={<Add />} onClick={() => setIsDrawerOpen(true)}>
+          <AtomButton startIcon={<Add />} onClick={() => router.push("/schedules/lessons/create")}>
             새 수업 등록
           </AtomButton>
         }

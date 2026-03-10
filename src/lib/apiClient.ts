@@ -94,6 +94,9 @@ export const apiClient = {
 
   // --- Instructors (강사 DB) ---
   getInstructorById: (id: string) => request<any>(`/instructors/${id}`),
+  // 강사 목록 조회 API
+  getInstructors: () => 
+    request<any>("/instructors"),
 
   // --- Contracts (뼈대) ---
   getContracts: () => request<any>("/contracts"),

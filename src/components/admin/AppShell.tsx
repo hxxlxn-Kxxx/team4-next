@@ -186,9 +186,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </Box>
 
             <Stack direction="row" spacing={1} alignItems="center">
-              <AtomButton atomVariant="primary" sx={{ minHeight: 40, px: 2.25 }}>
-                신규 설정
-              </AtomButton>
               <IconButton sx={{ color: 'text.secondary' }}>
                 <Search />
               </IconButton>

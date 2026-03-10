@@ -4,16 +4,27 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box, Typography, Button, Paper, Grid, TextField, InputAdornment,
-  Divider, MenuItem, CircularProgress, Stack
+  MenuItem, CircularProgress, Stack, Divider
 } from "@mui/material";
-import { ArrowBack, Save, AddBox } from "@mui/icons-material";
+import { ArrowBack, Save, AddBox, Search, CheckCircle } from "@mui/icons-material";
+
+// 💡 전담 우체국 임포트!
+import { apiClient } from "@/src/lib/apiClient";
 
 export default function CreateLessonPage() {
   const router = useRouter();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // 강사 배정 State
   const [availableInstructors, setAvailableInstructors] = useState<any[]>([]);
   const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
+
+  // 장소 검색 State 💡
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchingVenue, setIsSearchingVenue] = useState(false);
+  const [selectedVenue, setSelectedVenue] = useState<any>(null);
 
   const initialFormState = {
     lectureTitle: "", startsAt: "", endsAt: "", payAmount: "", studentCount: "", 
@@ -26,6 +37,33 @@ export default function CreateLessonPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // 💡 장소 검색 핸들러
+  const handleSearchVenue = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearchingVenue(true);
+    try {
+      const results = await apiClient.searchVenue(searchQuery);
+      setSearchResults(Array.isArray(results) ? results : results.data || []);
+    } catch (error) {
+      console.error("장소 검색 에러:", error);
+      alert("장소를 검색하는 중 오류가 발생했습니다.");
+    } finally {
+      setIsSearchingVenue(false);
+    }
+  };
+
+  // 💡 장소 선택 시 폼 자동 채우기 (UX 디테일)
+  const handleSelectVenue = (place: any) => {
+    setSelectedVenue(place);
+    setFormData((prev) => ({
+      ...prev,
+      museum: place.venueName,
+      region: place.venueAddress.split(" ")[0] || prev.region, // 주소의 첫 부분(예: 서울, 경기)을 지역으로!
+    }));
+    setSearchResults([]); // 선택 후 리스트 닫기
+  };
+
+  // 💡 가용 강사 조회 (apiClient로 교체)
   useEffect(() => {
     const fetchInstructors = async () => {
       if (!formData.startsAt || !formData.endsAt) return;
@@ -35,14 +73,7 @@ export default function CreateLessonPage() {
 
       setIsFetchingInstructors(true);
       try {
-        const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-        const response = await fetch(
-          `${apiUrl}/lessons/available-instructors?startsAt=${start.toISOString()}&endsAt=${end.toISOString()}`, 
-          { headers: { "Authorization": `Bearer ${token}` } }
-        );
-        if (!response.ok) throw new Error("가용 강사 조회 실패");
-        const data = await response.json();
+        const data = await apiClient.getAvailableInstructors(start.toISOString(), end.toISOString());
         setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
       } catch (error) {
         setAvailableInstructors([]);
@@ -54,10 +85,12 @@ export default function CreateLessonPage() {
   }, [formData.startsAt, formData.endsAt]);
 
   const isDateValid = formData.startsAt && formData.endsAt && new Date(formData.startsAt) < new Date(formData.endsAt);
+  
+  // 💡 필수값 체크 (장소 검색 객체도 포함)
   const isRequiredFilled = !!(
     formData.lectureTitle && formData.startsAt && formData.endsAt && 
     formData.payAmount && formData.studentCount && formData.region && 
-    formData.museum && formData.guideNotionUrl && formData.lessonDetails
+    formData.museum && formData.guideNotionUrl && formData.lessonDetails && selectedVenue
   );
   const isFormValid = isRequiredFilled && isDateValid;
 
@@ -66,33 +99,37 @@ export default function CreateLessonPage() {
     setIsSubmitting(true);
 
     try {
+      // 💡 1. 백엔드 요구사항에 맞춘 통합 Payload
       const payload = {
         ...formData,
         startsAt: new Date(formData.startsAt).toISOString(),
         endsAt: new Date(formData.endsAt).toISOString(),
         payAmount: Number(formData.payAmount),
         studentCount: Number(formData.studentCount),
-        classStatus: formData.instructorId ? "SCHEDULED" : "PENDING", 
+        // 장소 검색 데이터 추가
+        venueName: selectedVenue.venueName,
+        venueAddress: selectedVenue.venueAddress,
+        venueLat: selectedVenue.venueLat,
+        venueLng: selectedVenue.venueLng,
+        kakaoPlaceId: selectedVenue.kakaoPlaceId,
       };
 
-      const token = localStorage.getItem("accessToken");
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+      // 💡 2. 수업 생성 (apiClient 사용)
+      const createdLesson = await apiClient.createLesson(payload);
+      const newLessonId = createdLesson.lessonId || createdLesson.id;
 
-      const response = await fetch(`${apiUrl}/lessons`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "서버 에러가 발생했습니다.");
+      // 💡 3. 강사 배정 API 연달아 찌르기
+      if (formData.instructorId && newLessonId) {
+        await apiClient.assignInstructor(newLessonId, formData.instructorId);
       }
 
       alert("새 수업이 성공적으로 등록되었습니다!");
       
       if (isContinue) {
+        // 연속 등록 시 상태 초기화
         setFormData(initialFormState);
+        setSelectedVenue(null);
+        setSearchQuery("");
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         router.push("/schedules/lessons");
@@ -107,7 +144,6 @@ export default function CreateLessonPage() {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: "auto", pb: 10 }}>
-      {/* 상단 헤더 */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 4 }}>
         <Button startIcon={<ArrowBack />} onClick={() => router.back()} sx={{ mr: 2 }}>
           돌아가기
@@ -122,11 +158,59 @@ export default function CreateLessonPage() {
           <Grid size={{ xs: 12 }}>
             <TextField label="수업명" name="lectureTitle" value={formData.lectureTitle} onChange={handleChange} fullWidth required autoFocus />
           </Grid>
+          
+          {/* 💡 카카오 장소 검색 UI 추가 */}
+          <Grid size={{ xs: 12 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>수업 장소 검색 (카카오)</Typography>
+            <Stack direction="row" spacing={1}>
+              <TextField 
+                label="장소 검색 (예: 국립중앙박물관)" 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                fullWidth 
+                onKeyPress={(e) => e.key === 'Enter' && handleSearchVenue()}
+                InputProps={{
+                  endAdornment: isSearchingVenue ? <CircularProgress size={20} /> : null
+                }}
+              />
+              <Button variant="contained" onClick={handleSearchVenue} disabled={isSearchingVenue || !searchQuery} sx={{ minWidth: 100 }}>
+                <Search />
+              </Button>
+            </Stack>
+
+            {/* 검색 결과 리스트 */}
+            {searchResults.length > 0 && (
+              <Paper sx={{ mt: 1, maxHeight: 200, overflowY: "auto", border: "1px solid #e0e0e0" }}>
+                {searchResults.map((place) => (
+                  <Box
+                    key={place.kakaoPlaceId}
+                    onClick={() => handleSelectVenue(place)}
+                    sx={{ p: 2, cursor: "pointer", "&:hover": { bgcolor: "#f5f5f5" }, borderBottom: "1px solid #eee" }}
+                  >
+                    <Typography variant="body1" fontWeight="bold">{place.venueName}</Typography>
+                    <Typography variant="body2" color="text.secondary">{place.venueAddress}</Typography>
+                  </Box>
+                ))}
+              </Paper>
+            )}
+
+            {/* 선택된 장소 표시 */}
+            {selectedVenue && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: "#E8F5E9", borderRadius: 1, display: "flex", alignItems: "center", gap: 1 }}>
+                <CheckCircle color="success" />
+                <Box>
+                  <Typography variant="body2" fontWeight="bold" color="success.main">장소가 선택되었습니다.</Typography>
+                  <Typography variant="body1">{selectedVenue.venueName} <Typography component="span" variant="caption" color="text.secondary">({selectedVenue.venueAddress})</Typography></Typography>
+                </Box>
+              </Box>
+            )}
+          </Grid>
+
           <Grid size={{ xs: 12, md: 6 }}>
-            <TextField label="지역 (예: 서울, 경기)" name="region" value={formData.region} onChange={handleChange} fullWidth required />
+            <TextField label="지역 (예: 서울, 경기)" name="region" value={formData.region} onChange={handleChange} fullWidth required helperText="검색 시 자동 입력됩니다." />
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
-            <TextField label="박물관 / 장소명" name="museum" value={formData.museum} onChange={handleChange} fullWidth required />
+            <TextField label="박물관 / 장소명" name="museum" value={formData.museum} onChange={handleChange} fullWidth required helperText="검색 시 자동 입력됩니다." />
           </Grid>
         </Grid>
       </Paper>
@@ -142,7 +226,7 @@ export default function CreateLessonPage() {
             <TextField type="datetime-local" label="종료 일시" name="endsAt" value={formData.endsAt} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} error={formData.startsAt !== "" && formData.endsAt !== "" && !isDateValid} helperText={formData.startsAt !== "" && formData.endsAt !== "" && !isDateValid ? "종료 오류" : ""} />
           </Grid>
           <Grid size={{ xs: 12 }}>
-            <TextField select label="담당 강사 배정 (선택)" name="instructorId" value={formData.instructorId} onChange={handleChange} fullWidth disabled={!isDateValid || isFetchingInstructors} helperText={!formData.startsAt || !formData.endsAt ? "일정을 입력하면 가용 강사가 조회됩니다." : isFetchingInstructors ? "강사 조회 중..." : "미배정 시 '강사 대기' 상태로 등록됩니다."}>
+            <TextField select label="담당 강사 배정 (선택)" name="instructorId" value={formData.instructorId} onChange={handleChange} fullWidth disabled={!isDateValid || isFetchingInstructors} helperText={!formData.startsAt || !formData.endsAt ? "일정을 입력하면 가용 강사가 조회됩니다." : isFetchingInstructors ? "강사 조회 중..." : "미배정 시 '배정 대기' 상태로 등록됩니다."}>
               <MenuItem value=""><em>미배정 (나중에 배정하기)</em></MenuItem>
               {availableInstructors.map((inst) => (
                 <MenuItem key={inst.instructorId || inst.id} value={inst.instructorId || inst.id}>
@@ -185,11 +269,9 @@ export default function CreateLessonPage() {
             <Button variant="outlined" color="inherit" onClick={() => router.back()} disabled={isSubmitting}>
               취소
             </Button>
-            {/* 단건 등록 후 목록 이동 */}
             <Button variant="outlined" color="primary" startIcon={<Save />} onClick={() => handleSubmit(false)} disabled={!isFormValid || isSubmitting}>
               저장 후 목록으로
             </Button>
-            {/* 연속 등록! */}
             <Button variant="contained" color="primary" startIcon={<AddBox />} onClick={() => handleSubmit(true)} disabled={!isFormValid || isSubmitting}>
               {isSubmitting ? <CircularProgress size={24} color="inherit" /> : "저장 후 계속 등록하기"}
             </Button>

@@ -43,11 +43,6 @@ export default function DashboardPage() {
       <PageHeader
         title="종합 대시보드"
         description="오늘 운영 이슈와 배정 흐름을 한 화면에서 빠르게 확인합니다."
-        action={
-          <AtomButton onClick={() => setIsModalOpen(true)}>
-            + 새 수업 배정
-          </AtomButton>
-        }
       />
 
       <Grid container spacing={3} sx={{ mb: 4 }}>

@@ -103,4 +103,23 @@ export const apiClient = {
 
   // --- Chat (뼈대) ---
   getChatRooms: () => request<any>("/chat/rooms"),
+
+  //  카카오 장소 검색 API
+  searchVenue: (query: string) => 
+    request<any>(`/lessons/venue-search?query=${query}`),
+
+  //  수업 생성 API
+  createLesson: (payload: any) => 
+    request<any>("/lessons", { method: "POST", body: JSON.stringify(payload) }),
+
+  //  가용 강사 조회 API (시작/종료 시간 기준)
+  getAvailableInstructors: (startsAt: string, endsAt: string) => 
+    request<any>(`/lessons/available-instructors?startsAt=${startsAt}&endsAt=${endsAt}`),
+
+  //  강사 배정 API
+  assignInstructor: (lessonId: string, instructorId: string) => 
+    request<any>(`/lessons/${lessonId}/assign`, { 
+      method: "POST", 
+      body: JSON.stringify({ instructorId }) 
+    }),
 };

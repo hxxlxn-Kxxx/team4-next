@@ -7,6 +7,7 @@ import {
   ListItemText, Badge, TextField, Paper, Stack, CircularProgress,
 } from "@mui/material";
 import { Close, ArrowBack, Send } from "@mui/icons-material";
+import { io, Socket } from "socket.io-client";
 import { apiClient } from "@/src/lib/apiClient";
 
 // ─────────────────────────────────────────────
@@ -43,6 +44,16 @@ type ChatMessage = {
 // ─────────────────────────────────────────────
 // 헬퍼
 // ─────────────────────────────────────────────
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "http://localhost:3000";
+
+const getToken = (): string | null => {
+  if (typeof window !== "undefined") return localStorage.getItem("accessToken");
+  return null;
+};
+
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -50,15 +61,13 @@ function formatTime(iso: string): string {
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
-  if (isToday) {
+  if (isToday)
     return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
-  }
   const diff = now.getTime() - d.getTime();
   if (diff < 1000 * 60 * 60 * 24 * 2) return "어제";
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** 채팅방 상대방 이름 추출 (INSTRUCTOR 멤버 우선, 없으면 title, 없으면 roomId) */
 function getRoomDisplayName(room: ChatRoom): string {
   const other = room.members.find((m) => m.role === "INSTRUCTOR");
   return other?.userName || room.title || room.roomId;
@@ -70,13 +79,14 @@ function getRoomDisplayName(room: ChatRoom): string {
 interface ChatDrawerProps {
   open: boolean;
   onClose: () => void;
+  /** 드로어 외부(AppShell)에서 unreadCount를 공유 받을 콜백 */
+  onUnreadCountChange?: (count: number) => void;
 }
 
 // ─────────────────────────────────────────────
 // 컴포넌트
 // ─────────────────────────────────────────────
-export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
-  // ── 상태
+export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatDrawerProps) {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [isRoomsLoading, setIsRoomsLoading] = useState(false);
 
@@ -89,6 +99,67 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
   const [isSending, setIsSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const activeRoomRef = useRef<ChatRoom | null>(null);
+
+  // activeRoom이 바뀔 때 ref 동기화 (socket 핸들러 클로저에서 참조)
+  useEffect(() => {
+    activeRoomRef.current = activeRoom;
+  }, [activeRoom]);
+
+  // ── WebSocket 연결 (컴포넌트 마운트 ~ 언마운트)
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+
+    const socket = io(`${BASE_URL}/chat`, {
+      auth: { token },
+      transports: ["websocket"],
+    });
+    socketRef.current = socket;
+
+    // 실시간 메시지 수신
+    socket.on("chat_message", (msg: ChatMessage) => {
+      const current = activeRoomRef.current;
+      if (current && msg.roomId === current.roomId) {
+        // 현재 열린 방이면 메시지 추가
+        setMessages((prev) => {
+          // 중복 방지
+          if (prev.some((m) => m.messageId === msg.messageId)) return prev;
+          return [...prev, msg];
+        });
+      } else {
+        // 다른 방 메시지 → unreadCount+1
+        setRooms((prev) =>
+          prev.map((r) =>
+            r.roomId === msg.roomId
+              ? {
+                  ...r,
+                  unreadCount: r.unreadCount + 1,
+                  lastMessage: { content: msg.content, sentAt: msg.sentAt },
+                  updatedAt: msg.sentAt,
+                }
+              : r
+          )
+        );
+      }
+    });
+
+    socket.on("connect_error", (err) => {
+      console.warn("ChatSocket connect error:", err.message);
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  // unreadCount 변경 시 부모에 알림
+  useEffect(() => {
+    const total = rooms.reduce((sum, r) => sum + r.unreadCount, 0);
+    onUnreadCountChange?.(total);
+  }, [rooms, onUnreadCountChange]);
 
   // ── 채팅방 목록 조회
   const fetchRooms = useCallback(async () => {
@@ -100,7 +171,6 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
         : Array.isArray(data?.data)
         ? data.data
         : [];
-      // updatedAt 최신순
       list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       setRooms(list);
     } catch (err) {
@@ -110,7 +180,6 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     }
   }, []);
 
-  // 드로어 열릴 때 목록 조회
   useEffect(() => {
     if (open) fetchRooms();
   }, [open, fetchRooms]);
@@ -121,18 +190,13 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     try {
       const data = await apiClient.getChatMessages(roomId, cursor);
       const list: ChatMessage[] = Array.isArray(data?.items) ? data.items : [];
-      const nc: string | null = data?.nextCursor ?? null;
-
-      // 오름차순 정렬 (sentAt)
       list.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-
       if (cursor) {
-        // 더 불러오기: 앞에 추가
         setMessages((prev) => [...list, ...prev]);
       } else {
         setMessages(list);
       }
-      setNextCursor(nc);
+      setNextCursor(data?.nextCursor ?? null);
     } catch (err) {
       console.error("메시지 조회 실패:", err);
     } finally {
@@ -140,21 +204,20 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     }
   }, []);
 
-  // 방 선택
+  // ── 방 선택
   const handleSelectRoom = async (room: ChatRoom) => {
     setActiveRoom(room);
     setMessages([]);
     setNextCursor(null);
     await fetchMessages(room.roomId);
-    // 읽음 처리 (에러 무시)
+    // 읽음 처리 → vadgeCount 0
     apiClient.readRoom(room.roomId).catch(() => {});
-    // 목록 unreadCount 초기화
     setRooms((prev) =>
       prev.map((r) => (r.roomId === room.roomId ? { ...r, unreadCount: 0 } : r))
     );
   };
 
-  // 메시지 전송
+  // ── 메시지 전송
   const handleSend = async () => {
     if (!inputText.trim() || !activeRoom || isSending) return;
     const content = inputText.trim();
@@ -163,8 +226,10 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     try {
       const sent = await apiClient.sendChatMessage(activeRoom.roomId, content);
       const newMsg: ChatMessage = sent?.data ?? sent;
-      setMessages((prev) => [...prev, newMsg]);
-      // 목록 lastMessage 업데이트
+      setMessages((prev) => {
+        if (prev.some((m) => m.messageId === newMsg.messageId)) return prev;
+        return [...prev, newMsg];
+      });
       setRooms((prev) =>
         prev.map((r) =>
           r.roomId === activeRoom.roomId
@@ -174,22 +239,21 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
       );
     } catch (err) {
       console.error("메시지 전송 실패:", err);
-      setInputText(content); // 실패 시 복원
+      setInputText(content);
     } finally {
       setIsSending(false);
     }
   };
 
-  // 메시지 추가 시 스크롤 하단으로
+  // 메시지 추가 시 하단 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 뒤로가기
   const handleBack = () => {
     setActiveRoom(null);
     setMessages([]);
-    fetchRooms(); // 목록 갱신
+    fetchRooms();
   };
 
   const activeRoomName = activeRoom ? getRoomDisplayName(activeRoom) : "";
@@ -197,14 +261,8 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 400, display: "flex", flexDirection: "column", height: "100%" }}>
-        {/* ── 헤더 */}
-        <Box
-          sx={{
-            p: 2, display: "flex", alignItems: "center",
-            justifyContent: "space-between",
-            bgcolor: "#1976d2", color: "white",
-          }}
-        >
+        {/* 헤더 */}
+        <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#1976d2", color: "white" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {activeRoom && (
               <IconButton color="inherit" onClick={handleBack} size="small">
@@ -212,7 +270,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
               </IconButton>
             )}
             <Typography variant="h6" fontWeight="bold">
-              {activeRoom ? `${activeRoomName}` : "실시간 채팅"}
+              {activeRoom ? activeRoomName : "실시간 채팅"}
             </Typography>
           </Box>
           <IconButton color="inherit" onClick={onClose} size="small">
@@ -220,13 +278,11 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
           </IconButton>
         </Box>
 
-        {/* ── 채팅방 목록 */}
+        {/* 채팅방 목록 */}
         {!activeRoom && (
           <>
             {isRoomsLoading ? (
-              <Box display="flex" justifyContent="center" py={6}>
-                <CircularProgress />
-              </Box>
+              <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
             ) : rooms.length === 0 ? (
               <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
                 <Typography>채팅방이 없습니다.</Typography>
@@ -253,9 +309,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
                               <Typography fontWeight={room.unreadCount > 0 ? "bold" : "medium"}>
                                 {displayName}
                               </Typography>
-                              <Typography variant="caption" color="textSecondary">
-                                {time}
-                              </Typography>
+                              <Typography variant="caption" color="textSecondary">{time}</Typography>
                             </Box>
                           }
                           secondary={
@@ -277,16 +331,14 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
           </>
         )}
 
-        {/* ── 메시지 목록 */}
+        {/* 메시지 목록 */}
         {activeRoom && (
           <>
             <Box sx={{ flexGrow: 1, overflowY: "auto", p: 2, bgcolor: "#f8f9fa" }}>
-              {/* 더 불러오기 */}
               {nextCursor && (
                 <Box textAlign="center" mb={1}>
                   <Typography
-                    variant="caption"
-                    color="primary"
+                    variant="caption" color="primary"
                     sx={{ cursor: "pointer", textDecoration: "underline" }}
                     onClick={() => fetchMessages(activeRoom.roomId, nextCursor)}
                   >
@@ -294,11 +346,8 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
                   </Typography>
                 </Box>
               )}
-
               {isMsgLoading && messages.length === 0 ? (
-                <Box display="flex" justifyContent="center" py={4}>
-                  <CircularProgress size={28} />
-                </Box>
+                <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
               ) : messages.length === 0 ? (
                 <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
                   <Typography variant="body2">메시지가 없습니다.</Typography>
@@ -306,14 +355,10 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
               ) : (
                 <Stack spacing={2}>
                   {messages.map((msg) => {
-                    // 현재 로그인 유저는 ADMIN이므로 senderName 없거나 ADMIN 역할이면 내 메시지
                     const isAdmin =
                       activeRoom.members.find((m) => m.userId === msg.senderUserId)?.role === "ADMIN";
                     return (
-                      <Box
-                        key={msg.messageId}
-                        sx={{ display: "flex", justifyContent: isAdmin ? "flex-end" : "flex-start" }}
-                      >
+                      <Box key={msg.messageId} sx={{ display: "flex", justifyContent: isAdmin ? "flex-end" : "flex-start" }}>
                         <Paper
                           elevation={0}
                           sx={{
@@ -331,10 +376,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
                           <Typography variant="body2">{msg.content}</Typography>
                           <Typography
                             variant="caption"
-                            sx={{
-                              display: "block", mt: 0.5, textAlign: "right",
-                              color: isAdmin ? "rgba(255,255,255,0.7)" : "text.secondary",
-                            }}
+                            sx={{ display: "block", mt: 0.5, textAlign: "right", color: isAdmin ? "rgba(255,255,255,0.7)" : "text.secondary" }}
                           >
                             {formatTime(msg.sentAt)}
                           </Typography>
@@ -347,26 +389,17 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
               )}
             </Box>
 
-            {/* ── 입력창 */}
+            {/* 입력창 */}
             <Box sx={{ p: 2, bgcolor: "white", borderTop: "1px solid #eee", display: "flex", gap: 1 }}>
               <TextField
-                fullWidth
-                size="small"
-                placeholder="메시지를 입력하세요..."
-                variant="outlined"
+                fullWidth size="small" placeholder="메시지를 입력하세요..." variant="outlined"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 disabled={isSending}
               />
               <IconButton
-                color="primary"
-                onClick={handleSend}
+                color="primary" onClick={handleSend}
                 disabled={!inputText.trim() || isSending}
                 sx={{ bgcolor: "rgba(25, 118, 210, 0.1)" }}
               >

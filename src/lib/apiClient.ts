@@ -122,6 +122,7 @@ export const apiClient = {
     }),
   readRoom: (roomId: string) =>
     request<any>(`/chat/rooms/${roomId}/read`, { method: "POST" }),
+  getUnreadCount: () => request<any>("/chat/unread-count"),
 
   //  카카오 장소 검색 API
   searchVenue: (query: string) => 

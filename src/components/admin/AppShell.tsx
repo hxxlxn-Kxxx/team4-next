@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { apiClient } from '@/src/lib/apiClient';
 import Image from 'next/image';
 import {
   Avatar,
@@ -35,6 +36,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Instructors: pathname.startsWith('/instructors'),
     Schedules: pathname.startsWith('/schedules'),
@@ -48,6 +50,23 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const toggleGroup = (label: string) => {
     setOpenGroups((current) => ({ ...current, [label]: !current[label] }));
   };
+
+  // 초기 미읽음 카운트 조회 (30초마다 폴링)
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const data = await apiClient.getUnreadCount();
+      const count = data?.unreadCount ?? data?.count ?? 0;
+      setChatUnreadCount(count);
+    } catch {
+      // 인증 전이면 무시
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUnreadCount();
+    const timer = setInterval(refreshUnreadCount, 30000);
+    return () => clearInterval(timer);
+  }, [refreshUnreadCount]);
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
@@ -190,7 +209,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <Search />
               </IconButton>
               <IconButton onClick={() => setIsChatOpen(true)} sx={{ color: 'text.secondary' }}>
-                <Badge badgeContent={2} color="error">
+                <Badge badgeContent={chatUnreadCount} color="error">
                   <ChatBubble />
                 </Badge>
               </IconButton>
@@ -219,7 +238,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </Box>
       </Box>
 
-      <ChatDrawer open={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <ChatDrawer
+        open={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        onUnreadCountChange={(count) => setChatUnreadCount(count)}
+      />
     </Box>
   );
 }

@@ -13,7 +13,9 @@ import {
   People, Description, Edit, Block, Map,
   DirectionsWalk, Place, CheckCircle, AccessTime, MyLocation,
 } from "@mui/icons-material";
-import { LESSON_STATUS_MAP, type LessonStatus } from "@/src/types/backend";
+import {
+  LESSON_STATUS_MAP, type LessonStatus, LESSON_SOURCE_TYPE_MAP, type LessonSourceType,
+} from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
 
 // ─────────────────────────────────────────────
@@ -40,6 +42,7 @@ type LessonDetail = {
   venueLat?: number;
   venueLng?: number;
   kakaoPlaceId?: string;
+  sourceType?: LessonSourceType | null;
 };
 
 type AvailableInstructor = {
@@ -437,6 +440,21 @@ export default function ClassDetailPage() {
         )}
         <Chip label={CLASS_STATUS_MAP[currentStatus]?.label || currentStatus} color={CLASS_STATUS_MAP[currentStatus]?.color || "warning"} sx={{ fontWeight: "bold", fontSize: "1rem", py: 2.5, px: 1 }} />
       </Box>
+
+      {/* 외부 import 안내 배너 */}
+      {lesson.sourceType === "EXTERNAL_DOCUMENT" && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 3, borderRadius: 2, "& .MuiAlert-message": { width: "100%" } }}
+        >
+          <Typography variant="subtitle2" fontWeight="bold">
+            {LESSON_SOURCE_TYPE_MAP.EXTERNAL_DOCUMENT.label}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>
+            {LESSON_SOURCE_TYPE_MAP.EXTERNAL_DOCUMENT.description}
+          </Typography>
+        </Alert>
+      )}
 
       {/* 탭 메뉴 */}
       <Tabs

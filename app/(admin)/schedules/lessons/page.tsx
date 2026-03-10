@@ -27,8 +27,8 @@ import SurfaceCard from "@/src/components/admin/SurfaceCard";
 import AtomBadge from "@/src/components/atoms/AtomBadge";
 import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
-import type { LessonStatus } from "@/src/types/backend";
-import { LESSON_STATUS_MAP } from "@/src/types/backend";
+import type { LessonStatus, LessonSourceType } from "@/src/types/backend";
+import { LESSON_STATUS_MAP, LESSON_SOURCE_TYPE_MAP } from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
 
 type LessonRow = {
@@ -40,6 +40,7 @@ type LessonRow = {
   startsAt: string;
   endsAt: string;
   status: LessonStatus;
+  sourceType?: LessonSourceType | null;
   requestedInstructorId?: string | null;
   requestedInstructor?: { 
     name: string;
@@ -385,7 +386,25 @@ export default function ClassManagementPage() {
                   onClick={() => router.push(`/schedules/lessons/${lesson.lessonId}`)} 
                   sx={{ cursor: "pointer" }} 
                 >
-                  <TableCell align="center">{lesson.lectureTitle}</TableCell>
+                  <TableCell align="center">
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
+                      {lesson.lectureTitle}
+                      {lesson.sourceType === "EXTERNAL_DOCUMENT" && (
+                        <Chip
+                          label={LESSON_SOURCE_TYPE_MAP.EXTERNAL_DOCUMENT.label}
+                          size="small"
+                          sx={{
+                            fontSize: "0.65rem",
+                            bgcolor: "#FFF3E0",
+                            color: "#E65100",
+                            fontWeight: 700,
+                            border: "1px solid #FFB74D",
+                            height: 20,
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell align="center">{location}</TableCell>
                   <TableCell align="center">
                    {lesson.requestedInstructor?.name || "미배정"}

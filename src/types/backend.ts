@@ -30,6 +30,30 @@ export const LESSON_STATUS_MAP: Record<string, { label: string; color: any }> = 
   CANCELLED: { label: "취소", color: "error" },
 };
 
+// ============ Lesson Source Type Enum ============
+/** 수업 생성 출처: 내부 관리자 생성 vs 강사 앱 외부 계약서 import */
+export type LessonSourceType = "INTERNAL" | "EXTERNAL_DOCUMENT";
+
+export const LESSON_SOURCE_TYPE_MAP: Record<LessonSourceType, { label: string; description: string }> = {
+  INTERNAL: { label: "내부 등록", description: "관리자가 직접 생성한 수업입니다." },
+  EXTERNAL_DOCUMENT: {
+    label: "외부 계약서",
+    description: "강사가 앱에서 외부 계약서를 업로드하여 자동 생성된 수업입니다. 실제 운영 수업이 아닐 수 있습니다.",
+  },
+};
+
+// ============ Company Source Type Enum ============
+/** 회사 생성 출처: 내부 가입 회사 vs 외부 import 시 자동 생성된 placeholder */
+export type CompanySourceType = "INTERNAL" | "EXTERNAL_IMPORTED";
+
+export const COMPANY_SOURCE_TYPE_MAP: Record<CompanySourceType, { label: string; description: string }> = {
+  INTERNAL: { label: "정식 회원사", description: "정상 가입된 내부 운영 회사입니다." },
+  EXTERNAL_IMPORTED: {
+    label: "외부 placeholder",
+    description: "강사 앱 외부 계약서 import 과정에서 자동 생성된 임시 회사입니다. 실제 가입 회사가 아닙니다.",
+  },
+};
+
 // ============ Lesson Request Status Enum ============
 export type LessonRequestStatus =
   | "PENDING" // 요청 대기

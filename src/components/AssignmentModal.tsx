@@ -61,6 +61,13 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
   const [selectedVenue, setSelectedVenue] = useState<any>(null);
   const [guideUrl, setGuideUrl] = useState("");
 
+  const [region, setRegion] = useState("");
+  const [museum, setMuseum] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [studentCount, setStudentCount] = useState("");
+  const [lessonDetails, setLessonDetails] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+
   const [availableInstructors, setAvailableInstructors] = useState<any[]>([]);
   const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
   const [selectedInstructorId, setSelectedInstructorId] = useState("");
@@ -87,6 +94,12 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
     setSearchResults([]);
     setSelectedVenue(null);
     setGuideUrl("");
+    setRegion("");
+    setMuseum("");
+    setPayAmount("");
+    setStudentCount("");
+    setLessonDetails("");
+    setDeliveryNotes("");
     setSelectedInstructorId("");
   };
 
@@ -146,8 +159,12 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
         venueLng: selectedVenue.venueLng,
         kakaoPlaceId: selectedVenue.kakaoPlaceId,
         guideNotionUrl: guideUrl,
-        payAmount: 0, 
-        studentCount: 0,
+        region,
+        museum,
+        lessonDetails,
+        deliveryNotes,
+        payAmount: Number(payAmount) || 0,
+        studentCount: Number(studentCount) || 0,
       };
       const createdLesson = await apiClient.createLesson(payload);
       const newLessonId = createdLesson.lessonId || createdLesson.id;
@@ -186,6 +203,17 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
     <Stack spacing={2.5}>
       <Typography variant="subtitle2" color="text.secondary">수업명과 일정을 선택해주세요.</Typography>
       <AtomInput label="수업명" value={lectureTitle} onChange={(e) => setLectureTitle(e.target.value)} placeholder="예: [초등] 신라의 달밤 투어" fullWidth required />
+      
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <AtomInput label="지역" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="예: 서울" fullWidth />
+        <AtomInput label="분류 (박물관/기관)" value={museum} onChange={(e) => setMuseum(e.target.value)} placeholder="예: 국립중앙박물관" fullWidth />
+      </Stack>
+
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <AtomInput type="number" label="강사 지급액(원)" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="예: 120000" fullWidth />
+        <AtomInput type="number" label="배정 학생 수(명)" value={studentCount} onChange={(e) => setStudentCount(e.target.value)} placeholder="예: 10" fullWidth />
+      </Stack>
+
       <AtomInput type="date" label="날짜" value={lessonDate} onChange={(e) => setLessonDate(e.target.value)} fullWidth required />
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <AtomInput select label="시작시간" value={startTime} onChange={(e) => handleStartTimeChange(e.target.value)} fullWidth required>
@@ -244,6 +272,8 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
 
       <Divider />
       <AtomInput label="지도안 링크 (노션 URL)" value={guideUrl} onChange={(e) => setGuideUrl(e.target.value)} placeholder="https://notion.so/..." fullWidth />
+      <AtomInput label="수업 상세 내용" value={lessonDetails} onChange={(e) => setLessonDetails(e.target.value)} placeholder="예: 연표 카드를 이용한 체험형 활동" multiline rows={3} fullWidth />
+      <AtomInput label="강사 전달 사항" value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder="예: 수업 10분 전 집결할 수 있도록 안내" multiline rows={2} fullWidth />
     </Stack>
   );
 

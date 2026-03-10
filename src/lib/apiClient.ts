@@ -111,8 +111,17 @@ export const apiClient = {
     return request<any>(`/attendance-events${qs.toString() ? `?${qs}` : ""}`);
   },
 
-  // --- Chat (뼈대) ---
+  // --- Chat ---
   getChatRooms: () => request<any>("/chat/rooms"),
+  getChatMessages: (roomId: string, cursor?: string) =>
+    request<any>(`/chat/rooms/${roomId}/messages${cursor ? `?cursor=${cursor}` : ""}`),
+  sendChatMessage: (roomId: string, content: string) =>
+    request<any>(`/chat/rooms/${roomId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  readRoom: (roomId: string) =>
+    request<any>(`/chat/rooms/${roomId}/read`, { method: "POST" }),
 
   //  카카오 장소 검색 API
   searchVenue: (query: string) => 

@@ -98,8 +98,9 @@ export const apiClient = {
   getInstructors: () => 
     request<any>("/instructors"),
 
-  // --- Contracts (뼈대) ---
-  getContracts: () => request<any>("/contracts"),
+  // --- Contracts ---
+  getContracts: (params?: string) => request<any>(`/contracts${params ? `?${params}` : ""}`),
+  getContractById: (contractId: string) => request<any>(`/contracts/${contractId}`),
 
   // --- Attendance (뼈대) ---
   getAttendances: () => request<any>("/attendances"),

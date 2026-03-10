@@ -102,8 +102,14 @@ export const apiClient = {
   getContracts: (params?: string) => request<any>(`/contracts${params ? `?${params}` : ""}`),
   getContractById: (contractId: string) => request<any>(`/contracts/${contractId}`),
 
-  // --- Attendance (뼈대) ---
+  // --- Attendance ---
   getAttendances: () => request<any>("/attendances"),
+  getAttendanceEvents: (params: { lessonId?: string; eventType?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.lessonId) qs.set("lessonId", params.lessonId);
+    if (params.eventType) qs.set("eventType", params.eventType);
+    return request<any>(`/attendance-events${qs.toString() ? `?${qs}` : ""}`);
+  },
 
   // --- Chat (뼈대) ---
   getChatRooms: () => request<any>("/chat/rooms"),

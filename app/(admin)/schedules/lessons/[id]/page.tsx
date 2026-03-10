@@ -6,14 +6,19 @@ import {
   Box, Typography, Button, Paper, Grid, Chip, CircularProgress, Divider,
   Alert, Stack, Link, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, InputLabel, Select, MenuItem, TextField, InputAdornment,
+  Tab, Tabs,
 } from "@mui/material";
 import {
   ArrowBack, CalendarMonth, LocationOn, Person, AttachMoney,
-  People, Description, Edit, Block, Map
+  People, Description, Edit, Block, Map,
+  DirectionsWalk, Place, CheckCircle, AccessTime, MyLocation,
 } from "@mui/icons-material";
 import { LESSON_STATUS_MAP, type LessonStatus } from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
 
+// ─────────────────────────────────────────────
+// 타입
+// ─────────────────────────────────────────────
 type LessonDetail = {
   lessonId?: string;
   id?: string;
@@ -44,11 +49,38 @@ type AvailableInstructor = {
   name?: string;
 };
 
+type AttendanceEvent = {
+  attendanceEventId: string;
+  lessonId: string;
+  instructorId: string;
+  eventType: "DEPART" | "ARRIVE" | "FINISH";
+  occurredAt: string;
+  lat?: number;
+  lng?: number;
+  accuracyMeters?: number | null;
+  distanceMeters?: number | null;
+  timingStatus: "ON_TIME" | "LATE";
+  locationStatus: "OK" | "SUSPICIOUS";
+  isValid?: boolean;
+};
+
+// ─────────────────────────────────────────────
+// 상수
+// ─────────────────────────────────────────────
 const CLASS_STATUS_MAP: Record<string, { label: string; color: any }> = {
   ...LESSON_STATUS_MAP,
   SCHEDULED: { label: "배정 완료", color: "primary" },
 };
 
+const EVENT_TYPE_MAP: Record<AttendanceEvent["eventType"], { label: string; icon: React.ReactNode; color: string }> = {
+  DEPART: { label: "출발", icon: <DirectionsWalk fontSize="small" />, color: "#1565C0" },
+  ARRIVE: { label: "도착", icon: <Place fontSize="small" />, color: "#2E7D32" },
+  FINISH: { label: "완료", icon: <CheckCircle fontSize="small" />, color: "#6A1B9A" },
+};
+
+// ─────────────────────────────────────────────
+// 헬퍼
+// ─────────────────────────────────────────────
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   return "알 수 없는 오류가 발생했습니다.";
@@ -60,6 +92,13 @@ const formatUtcToLocal = (utcString?: string) => {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
 };
 
+const formatDateTime = (iso?: string) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
 const formatForInput = (utcString?: string) => {
   if (!utcString) return "";
   const d = new Date(utcString);
@@ -67,6 +106,152 @@ const formatForInput = (utcString?: string) => {
   return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 };
 
+// ─────────────────────────────────────────────
+// 체크인 타임라인 컴포넌트
+// ─────────────────────────────────────────────
+function CheckinTimeline({ lessonId }: { lessonId: string }) {
+  const [events, setEvents] = useState<AttendanceEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetch = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getAttendanceEvents({ lessonId });
+        const list: AttendanceEvent[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        // occurredAt 오름차순 정렬
+        list.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+        setEvents(list);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetch();
+  }, [lessonId]);
+
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" py={6}>
+        <CircularProgress size={32} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>;
+  }
+
+  if (events.length === 0) {
+    return (
+      <Box
+        sx={{ textAlign: "center", py: 6, color: "text.secondary", bgcolor: "#f8f9fa", borderRadius: 2 }}
+      >
+        <MyLocation sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
+        <Typography>기록된 체크인 이벤트가 없습니다.</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Stack spacing={0}>
+      {events.map((event, idx) => {
+        const meta = EVENT_TYPE_MAP[event.eventType];
+        const isLast = idx === events.length - 1;
+
+        return (
+          <Box key={event.attendanceEventId} sx={{ display: "flex", gap: 2 }}>
+            {/* 타임라인 라인 + 아이콘 */}
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 36 }}>
+              <Box
+                sx={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  bgcolor: meta.color, color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0, zIndex: 1,
+                }}
+              >
+                {meta.icon}
+              </Box>
+              {!isLast && (
+                <Box sx={{ width: 2, flexGrow: 1, bgcolor: "#E0E0E0", my: 0.5 }} />
+              )}
+            </Box>
+
+            {/* 이벤트 카드 */}
+            <Paper
+              elevation={0}
+              sx={{
+                flex: 1, p: 2.5, mb: isLast ? 0 : 2,
+                border: "1px solid #E8E8E8", borderRadius: 2,
+                bgcolor: "#FAFAFA",
+              }}
+            >
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                <Typography fontWeight={700} sx={{ color: meta.color }}>
+                  {meta.label}
+                </Typography>
+                {/* timingStatus 배지 */}
+                <Chip
+                  label={event.timingStatus === "ON_TIME" ? "정시" : "지각"}
+                  size="small"
+                  sx={{
+                    fontWeight: 700, fontSize: "0.7rem",
+                    bgcolor: event.timingStatus === "ON_TIME" ? "#E8F5E9" : "#FFEBEE",
+                    color: event.timingStatus === "ON_TIME" ? "#2E7D32" : "#C62828",
+                  }}
+                />
+                {/* locationStatus 배지 */}
+                <Chip
+                  label={event.locationStatus === "OK" ? "위치 정상" : "위치 의심"}
+                  size="small"
+                  sx={{
+                    fontWeight: 700, fontSize: "0.7rem",
+                    bgcolor: event.locationStatus === "OK" ? "#E8F5E9" : "#FFF3E0",
+                    color: event.locationStatus === "OK" ? "#2E7D32" : "#E65100",
+                  }}
+                />
+              </Stack>
+
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <AccessTime sx={{ fontSize: 14, color: "text.secondary" }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {formatDateTime(event.occurredAt)}
+                  </Typography>
+                </Stack>
+                {event.distanceMeters != null && (
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <LocationOn sx={{ fontSize: 14, color: "text.secondary" }} />
+                    <Typography variant="body2" color="text.secondary">
+                      거리 {event.distanceMeters}m
+                    </Typography>
+                  </Stack>
+                )}
+                {event.accuracyMeters != null && (
+                  <Typography variant="body2" color="text.secondary">
+                    정확도 ±{event.accuracyMeters}m
+                  </Typography>
+                )}
+              </Stack>
+            </Paper>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 메인 페이지
+// ─────────────────────────────────────────────
 export default function ClassDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -74,6 +259,8 @@ export default function ClassDetailPage() {
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [tabIndex, setTabIndex] = useState(0);
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [availableInstructors, setAvailableInstructors] = useState<AvailableInstructor[]>([]);
@@ -113,7 +300,7 @@ export default function ClassDetailPage() {
     setIsFetchingInstructors(true);
     try {
       const data = await apiClient.getAvailableInstructors(
-        new Date(lesson.startsAt).toISOString(), 
+        new Date(lesson.startsAt).toISOString(),
         new Date(lesson.endsAt).toISOString()
       );
       setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
@@ -224,6 +411,7 @@ export default function ClassDetailPage() {
 
   const isCanceled = lesson.classStatus === "CANCELLED" || lesson.status === "CANCELLED";
   const currentStatus = lesson.classStatus || lesson.status || "";
+  const lessonId = lesson.lessonId || lesson.id || (id as string);
 
   return (
     <Box sx={{ maxWidth: 900, mx: "auto", pb: 10 }}>
@@ -231,7 +419,7 @@ export default function ClassDetailPage() {
       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
         <Button startIcon={<ArrowBack />} onClick={() => router.back()} sx={{ mr: 2 }} disabled={isEditing}>목록</Button>
         <Typography variant="h5" fontWeight="bold" sx={{ flexGrow: 1 }}>수업 상세 정보</Typography>
-        
+
         {!isCanceled && (
           <Stack direction="row" spacing={1} sx={{ mr: 2 }}>
             {isEditing ? (
@@ -250,102 +438,128 @@ export default function ClassDetailPage() {
         <Chip label={CLASS_STATUS_MAP[currentStatus]?.label || currentStatus} color={CLASS_STATUS_MAP[currentStatus]?.color || "warning"} sx={{ fontWeight: "bold", fontSize: "1rem", py: 2.5, px: 1 }} />
       </Box>
 
-      {/* 기본 정보 & 장소 카드 */}
-      <Paper sx={{ p: 4, borderRadius: 3, mb: 3 }}>
-        {isEditing ? (
-          <Box sx={{ mb: 3 }}>
-            <TextField label="수업명" name="lectureTitle" value={editFormData.lectureTitle} onChange={handleEditChange} fullWidth sx={{ mb: 3 }} />
-            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>분류 정보</Typography>
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid size={{ xs: 6 }}><TextField label="지역" name="region" value={editFormData.region} onChange={handleEditChange} fullWidth /></Grid>
-              <Grid size={{ xs: 6 }}><TextField label="분류 (박물관/기관)" name="museum" value={editFormData.museum} onChange={handleEditChange} fullWidth /></Grid>
-            </Grid>
-            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>실제 수업 장소 (선택)</Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 6 }}><TextField label="장소명 (예: 국립중앙박물관 정문)" name="venueName" value={editFormData.venueName} onChange={handleEditChange} fullWidth /></Grid>
-              <Grid size={{ xs: 12, md: 6 }}><TextField label="상세 주소" name="venueAddress" value={editFormData.venueAddress} onChange={handleEditChange} fullWidth /></Grid>
-            </Grid>
-          </Box>
-        ) : (
-          <>
-            <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>{lesson.lectureTitle}</Typography>
-            <Stack spacing={1} sx={{ mb: 4 }}>
-              <Typography variant="subtitle1" color="textSecondary" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <LocationOn fontSize="small" /> {lesson.region} {lesson.museum && `> ${lesson.museum}`}
-              </Typography>
-              {(lesson.venueName || lesson.venueAddress) && (
-                <Typography variant="body2" color="textSecondary" sx={{ display: "flex", alignItems: "center", gap: 1, bgcolor: "#f8f9fa", p: 1, borderRadius: 1, width: "fit-content" }}>
-                  <Map fontSize="small" color="primary" /> 
-                  {lesson.venueName} {lesson.venueAddress && `(${lesson.venueAddress})`}
-                </Typography>
-              )}
-            </Stack>
-          </>
-        )}
+      {/* 탭 메뉴 */}
+      <Tabs
+        value={tabIndex}
+        onChange={(_, v) => setTabIndex(v)}
+        sx={{ mb: 3, borderBottom: "1px solid #eee" }}
+      >
+        <Tab label="기본 정보" sx={{ fontWeight: "bold" }} />
+        <Tab label="체크인 현황" sx={{ fontWeight: "bold" }} />
+      </Tabs>
 
-        <Divider sx={{ mb: 4 }} />
-
-        {/* 일정 및 비용 정보 */}
-        <Grid container spacing={4}>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Stack spacing={3}>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 시작 시간</Typography>
-                {isEditing ? <TextField type="datetime-local" name="startsAt" value={editFormData.startsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.startsAt)}</Typography>}
+      {/* ── 탭 0: 기본 정보 */}
+      {tabIndex === 0 && (
+        <>
+          {/* 기본 정보 & 장소 카드 */}
+          <Paper sx={{ p: 4, borderRadius: 3, mb: 3 }}>
+            {isEditing ? (
+              <Box sx={{ mb: 3 }}>
+                <TextField label="수업명" name="lectureTitle" value={editFormData.lectureTitle} onChange={handleEditChange} fullWidth sx={{ mb: 3 }} />
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>분류 정보</Typography>
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  <Grid size={{ xs: 6 }}><TextField label="지역" name="region" value={editFormData.region} onChange={handleEditChange} fullWidth /></Grid>
+                  <Grid size={{ xs: 6 }}><TextField label="분류 (박물관/기관)" name="museum" value={editFormData.museum} onChange={handleEditChange} fullWidth /></Grid>
+                </Grid>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>실제 수업 장소 (선택)</Typography>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 6 }}><TextField label="장소명 (예: 국립중앙박물관 정문)" name="venueName" value={editFormData.venueName} onChange={handleEditChange} fullWidth /></Grid>
+                  <Grid size={{ xs: 12, md: 6 }}><TextField label="상세 주소" name="venueAddress" value={editFormData.venueAddress} onChange={handleEditChange} fullWidth /></Grid>
+                </Grid>
               </Box>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 종료 시간</Typography>
-                {isEditing ? <TextField type="datetime-local" name="endsAt" value={editFormData.endsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.endsAt)}</Typography>}
-              </Box>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Person fontSize="small" /> 담당 강사</Typography>
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Typography variant="body1" fontWeight="medium" color={isEditing ? "textSecondary" : "textPrimary"}>
-                    {lesson.instructorName || "현재 미배정 상태입니다."} {isEditing && "(강사 변경은 배정 기능을 이용해주세요)"}
+            ) : (
+              <>
+                <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>{lesson.lectureTitle}</Typography>
+                <Stack spacing={1} sx={{ mb: 4 }}>
+                  <Typography variant="subtitle1" color="textSecondary" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <LocationOn fontSize="small" /> {lesson.region} {lesson.museum && `> ${lesson.museum}`}
                   </Typography>
-                  {!isCanceled && !isEditing && (
-                    <Button variant="outlined" size="small" onClick={handleOpenAssignModal}>강사 배정하기</Button>
+                  {(lesson.venueName || lesson.venueAddress) && (
+                    <Typography variant="body2" color="textSecondary" sx={{ display: "flex", alignItems: "center", gap: 1, bgcolor: "#f8f9fa", p: 1, borderRadius: 1, width: "fit-content" }}>
+                      <Map fontSize="small" color="primary" />
+                      {lesson.venueName} {lesson.venueAddress && `(${lesson.venueAddress})`}
+                    </Typography>
                   )}
-                </Box>
-              </Box>
-            </Stack>
-          </Grid>
+                </Stack>
+              </>
+            )}
 
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Stack spacing={3}>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><AttachMoney fontSize="small" /> 강사 지급액</Typography>
-                {isEditing ? <TextField type="number" name="payAmount" value={editFormData.payAmount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">원</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.payAmount ? lesson.payAmount.toLocaleString() + "원" : "미정"}</Typography>}
-              </Box>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><People fontSize="small" /> 배정 학생 수</Typography>
-                {isEditing ? <TextField type="number" name="studentCount" value={editFormData.studentCount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">명</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.studentCount}명</Typography>}
-              </Box>
-              <Box>
-                <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Description fontSize="small" /> 가이드 노션</Typography>
-                {isEditing ? <TextField type="url" name="guideNotionUrl" value={editFormData.guideNotionUrl} onChange={handleEditChange} fullWidth size="small" /> : (lesson.guideNotionUrl ? <Link href={lesson.guideNotionUrl} target="_blank" underline="hover" color="primary">지도안 열기</Link> : <Typography variant="body1" color="textSecondary">등록된 링크가 없습니다.</Typography>)}
-              </Box>
-            </Stack>
-          </Grid>
-        </Grid>
-      </Paper>
+            <Divider sx={{ mb: 4 }} />
 
-      {/* 상세 내용 및 메모 카드 */}
-      <Paper sx={{ p: 4, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>수업 상세 내용</Typography>
-        {isEditing ? (
-          <TextField name="lessonDetails" value={editFormData.lessonDetails} onChange={handleEditChange} fullWidth multiline rows={4} sx={{ mb: 4 }} />
-        ) : (
-          <Box sx={{ p: 2, bgcolor: "#f8f9fa", borderRadius: 2, mb: 4, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.lessonDetails || "등록된 상세 내용이 없습니다."}</Box>
-        )}
+            {/* 일정 및 비용 */}
+            <Grid container spacing={4}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 시작 시간</Typography>
+                    {isEditing ? <TextField type="datetime-local" name="startsAt" value={editFormData.startsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.startsAt)}</Typography>}
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><CalendarMonth fontSize="small" /> 수업 종료 시간</Typography>
+                    {isEditing ? <TextField type="datetime-local" name="endsAt" value={editFormData.endsAt} onChange={handleEditChange} fullWidth size="small" /> : <Typography variant="body1" fontWeight="medium">{formatUtcToLocal(lesson.endsAt)}</Typography>}
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Person fontSize="small" /> 담당 강사</Typography>
+                    <Box display="flex" alignItems="center" gap={2}>
+                      <Typography variant="body1" fontWeight="medium" color={isEditing ? "textSecondary" : "textPrimary"}>
+                        {lesson.instructorName || "현재 미배정 상태입니다."} {isEditing && "(강사 변경은 배정 기능을 이용해주세요)"}
+                      </Typography>
+                      {!isCanceled && !isEditing && (
+                        <Button variant="outlined" size="small" onClick={handleOpenAssignModal}>강사 배정하기</Button>
+                      )}
+                    </Box>
+                  </Box>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Stack spacing={3}>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><AttachMoney fontSize="small" /> 강사 지급액</Typography>
+                    {isEditing ? <TextField type="number" name="payAmount" value={editFormData.payAmount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">원</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.payAmount ? lesson.payAmount.toLocaleString() + "원" : "미정"}</Typography>}
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><People fontSize="small" /> 배정 학생 수</Typography>
+                    {isEditing ? <TextField type="number" name="studentCount" value={editFormData.studentCount} onChange={handleEditChange} fullWidth size="small" InputProps={{ endAdornment: <InputAdornment position="end">명</InputAdornment> }} /> : <Typography variant="body1" fontWeight="medium">{lesson.studentCount}명</Typography>}
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Description fontSize="small" /> 가이드 노션</Typography>
+                    {isEditing ? <TextField type="url" name="guideNotionUrl" value={editFormData.guideNotionUrl} onChange={handleEditChange} fullWidth size="small" /> : (lesson.guideNotionUrl ? <Link href={lesson.guideNotionUrl} target="_blank" underline="hover" color="primary">지도안 열기</Link> : <Typography variant="body1" color="textSecondary">등록된 링크가 없습니다.</Typography>)}
+                  </Box>
+                </Stack>
+              </Grid>
+            </Grid>
+          </Paper>
 
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>전달 사항</Typography>
-        {isEditing ? (
-          <TextField name="deliveryNotes" value={editFormData.deliveryNotes} onChange={handleEditChange} fullWidth multiline rows={3} />
-        ) : (
-          <Box sx={{ p: 2, bgcolor: "#fff4e5", borderRadius: 2, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.deliveryNotes || "등록된 전달 사항이 없습니다."}</Box>
-        )}
-      </Paper>
+          {/* 상세 내용 및 메모 */}
+          <Paper sx={{ p: 4, borderRadius: 3 }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>수업 상세 내용</Typography>
+            {isEditing ? (
+              <TextField name="lessonDetails" value={editFormData.lessonDetails} onChange={handleEditChange} fullWidth multiline rows={4} sx={{ mb: 4 }} />
+            ) : (
+              <Box sx={{ p: 2, bgcolor: "#f8f9fa", borderRadius: 2, mb: 4, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.lessonDetails || "등록된 상세 내용이 없습니다."}</Box>
+            )}
+            <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>전달 사항</Typography>
+            {isEditing ? (
+              <TextField name="deliveryNotes" value={editFormData.deliveryNotes} onChange={handleEditChange} fullWidth multiline rows={3} />
+            ) : (
+              <Box sx={{ p: 2, bgcolor: "#fff4e5", borderRadius: 2, minHeight: 80, whiteSpace: "pre-wrap" }}>{lesson.deliveryNotes || "등록된 전달 사항이 없습니다."}</Box>
+            )}
+          </Paper>
+        </>
+      )}
+
+      {/* ── 탭 1: 체크인 현황 */}
+      {tabIndex === 1 && (
+        <Paper sx={{ p: 4, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
+            체크인 이벤트 타임라인
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            강사의 출발(DEPART) · 도착(ARRIVE) · 완료(FINISH) 이벤트를 시간순으로 표시합니다.
+          </Typography>
+          <CheckinTimeline lessonId={lessonId} />
+        </Paper>
+      )}
 
       {/* 강사 배정 모달 */}
       <Dialog open={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} fullWidth maxWidth="sm">

@@ -48,8 +48,9 @@ export default function LoginPage() {
     setErrorMessage("");
 
     try {
-      const data = await apiClient.postAuthGoogle(email);
-
+      // const data = await apiClient.postAuthGoogle(email);
+      const data = await apiClient.postAuthDemo(email);
+      
       localStorage.setItem("accessToken", data.accessToken);
       if (data.refreshToken) {
         localStorage.setItem("refreshToken", data.refreshToken);

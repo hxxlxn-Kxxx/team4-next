@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Alert,
   Box,
   CircularProgress,
+  Chip,
   Drawer,
   Grid,
   InputAdornment,
@@ -28,13 +29,16 @@ import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
 import type { LessonStatus } from "@/src/types/backend";
 import { LESSON_STATUS_MAP } from "@/src/types/backend";
+import { apiClient } from "@/src/lib/apiClient";
 
 type LessonRow = {
   lessonId: string;
   lectureTitle: string;
   museum?: string;
   venueName?: string;
+  region?: string;
   startsAt: string;
+  endsAt: string;
   status: LessonStatus;
   requestedInstructorId?: string | null;
   requestedInstructor?: { 
@@ -64,13 +68,13 @@ type LessonFormData = {
 
 const STATUS_OPTIONS: Array<{ value: "ALL" | LessonStatus; label: string }> = [
   { value: "ALL", label: "전체" },
-  { value: "PENDING", label: LESSON_STATUS_MAP.PENDING },
-  { value: "ACCEPTED", label: LESSON_STATUS_MAP.ACCEPTED },
-  { value: "CONTRACT_SIGNED", label: LESSON_STATUS_MAP.CONTRACT_SIGNED },
-  { value: "UPDATED", label: LESSON_STATUS_MAP.UPDATED },
-  { value: "IN_PROGRESS", label: LESSON_STATUS_MAP.IN_PROGRESS },
-  { value: "COMPLETED", label: LESSON_STATUS_MAP.COMPLETED },
-  { value: "CANCELLED", label: LESSON_STATUS_MAP.CANCELLED },
+  { value: "PENDING", label: LESSON_STATUS_MAP.PENDING.label },
+  { value: "ACCEPTED", label: LESSON_STATUS_MAP.ACCEPTED.label },
+  { value: "CONTRACT_SIGNED", label: LESSON_STATUS_MAP.CONTRACT_SIGNED.label },
+  { value: "UPDATED", label: LESSON_STATUS_MAP.UPDATED.label },
+  { value: "IN_PROGRESS", label: LESSON_STATUS_MAP.IN_PROGRESS.label },
+  { value: "COMPLETED", label: LESSON_STATUS_MAP.COMPLETED.label },
+  { value: "CANCELLED", label: LESSON_STATUS_MAP.CANCELLED.label },
 ];
 
 const STATUS_TONE_MAP: Record<LessonStatus, string> = {
@@ -125,41 +129,20 @@ export default function ClassManagementPage() {
     setListError("");
 
     try {
-      const token = localStorage.getItem("accessToken");
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+      const queryString = filterStatus !== "ALL" ? `status=${filterStatus}` : "";
+      const data = await apiClient.getLessons(queryString);
 
-      if (!token || !apiUrl) {
-        throw new Error("API 또는 로그인 토큰이 없습니다.");
-      }
-
-      const query = new URLSearchParams();
-      if (filterStatus !== "ALL") {
-        query.set("status", filterStatus);
-      }
-
-      const url = query.toString() ? `${apiUrl}/lessons?${query.toString()}` : `${apiUrl}/lessons`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `목록 조회 실패 (${response.status})`);
-      }
-
-      const data = await response.json();
-      const rows = Array.isArray(data) ? data : data.data || [];
+      const rows = Array.isArray(data) ? data : data.data || data.items || [];
       const normalizedName = searchName.trim();
       const filteredRows = normalizedName
         ? rows.filter((row: LessonRow) => row.lectureTitle.includes(normalizedName))
         : rows;
 
       setClasses(filteredRows);
-    } catch (error) {
+    } catch (error: any) {
       console.error("lessons list error:", error);
       setClasses([]);
-      setListError(error instanceof Error ? error.message : "수업 목록을 불러오지 못했습니다.");
+      setListError(error.message || "수업 목록을 불러오지 못했습니다.");
     } finally {
       setIsLoadingList(false);
     }
@@ -357,7 +340,13 @@ export default function ClassManagementPage() {
       ) : null}
 
       <TableContainer component={SurfaceCard}>
-        <Table>
+        {isLoadingList ? (
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", py: 10 }}>
+            <CircularProgress size={40} sx={{ mb: 2 }} />
+            <Typography color="textSecondary">수업 목록을 불러오는 중입니다...</Typography>
+          </Box>
+        ) :
+        (<Table>
           <TableHead sx={{ bgcolor: "#FBF7ED" }}>
             <TableRow>
               <TableCell align="center" sx={{ fontWeight: 700 }}>
@@ -378,50 +367,39 @@ export default function ClassManagementPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {isLoadingList ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                  <CircularProgress size={28} sx={{ mb: 1.5, color: "#B7791F" }} />
-                  <Typography variant="body2" color="text.secondary">
-                    데이터를 불러오는 중입니다...
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : classes.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    표시할 수업이 없습니다.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              classes.map((row) => (
-                <TableRow
-                  key={row.lessonId}
+            {classes.map((lesson) => {
+              const location = lesson.museum || lesson.venueName || lesson.region || "-";
+              const instructor = lesson.requestedInstructorId || "미배정";
+              
+              const statusKey = lesson.status as LessonStatus; 
+              const statusInfo = LESSON_STATUS_MAP[statusKey] || { label: lesson.status, color: "default" };
+
+              const startDate = new Date(lesson.startsAt);
+              const endDate = new Date(lesson.endsAt);
+              const dateStr = `${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ~ ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+
+              return (
+                <TableRow 
+                  key={lesson.lessonId} 
                   hover
-                  onClick={() => router.push(`/schedules/lessons/${row.lessonId}`)}
-                  sx={{ cursor: "pointer" }}
+                  onClick={() => router.push(`/schedules/lessons/${lesson.lessonId}`)} 
+                  sx={{ cursor: "pointer" }} 
                 >
-                  <TableCell align="center" sx={{ fontWeight: 600 }}>
-                    {row.lectureTitle}
+                  <TableCell align="center">{lesson.lectureTitle}</TableCell>
+                  <TableCell align="center">{location}</TableCell>
+                  <TableCell align="center">
+                   {lesson.requestedInstructor?.name || "미배정"}
                   </TableCell>
-                  <TableCell align="center">{row.museum || row.venueName || "-"}</TableCell>
+                  <TableCell align="center">{dateStr}</TableCell>
                   <TableCell align="center">
-  {row.requestedInstructor?.name || "미배정"}
-</TableCell>
-                  <TableCell align="center">{formatUtcToLocal(row.startsAt)}</TableCell>
-                  <TableCell align="center">
-                    <AtomBadge
-                      tone={STATUS_TONE_MAP[row.status]}
-                      label={LESSON_STATUS_MAP[row.status]}
-                    />
+                    <Chip label={statusInfo.label} color={statusInfo.color as any} size="small" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
+              );
+            })}
           </TableBody>
-        </Table>
+        </Table>)
+        }
       </TableContainer>
 
       <Drawer anchor="right" open={isDrawerOpen} onClose={() => setIsDrawerOpen(false)}>

@@ -77,10 +77,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 // 컴포넌트에서 가져다 쓸 실제 API 메서드들
 export const apiClient = {
   // --- Auth & User ---
-  postAuthGoogle: (idToken: string) => 
-    request<any>("/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
-  getMe: () => request<any>("/me"),
-  getMeCompany: () => request<any>("/me/company"),
+  // postAuthGoogle: (idToken: string) => 
+  //   request<any>("/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
+  // getMe: () => request<any>("/me"),
+  // getMeCompany: () => request<any>("/me/company"),
+
+  postAuthDemo: (email: string) => 
+    request<any>("/auth/demo-login", { 
+      method: "POST", 
+      body: JSON.stringify({ channel: "web", email })
+    }),
 
   // --- Lessons ---
   getLessons: (queryString: string = "") => 

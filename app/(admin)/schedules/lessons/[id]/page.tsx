@@ -64,9 +64,9 @@ type AvailableInstructor = {
   name?: string;
 };
 
-const CLASS_STATUS_MAP: Record<string, string> = {
+const CLASS_STATUS_MAP: Record<string, { label: string; color: any }> = {
   ...LESSON_STATUS_MAP,
-  SCHEDULED: "배정 완료",
+  SCHEDULED: { label: "배정 완료", color: "primary" },
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -370,8 +370,8 @@ export default function ClassDetailPage() {
           </Stack>
         )}
         <Chip
-          label={CLASS_STATUS_MAP[currentStatus] || currentStatus}
-          color={["SCHEDULED", "COMPLETED"].includes(currentStatus) ? "primary" : "warning"}
+          label={CLASS_STATUS_MAP[currentStatus]?.label || currentStatus}
+          color={CLASS_STATUS_MAP[currentStatus]?.color || "warning"}
           sx={{ fontWeight: "bold", fontSize: "1rem", py: 2.5, px: 1 }}
         />
       </Box>

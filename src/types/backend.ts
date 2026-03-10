@@ -20,14 +20,14 @@ export type LessonStatus =
   | "COMPLETED" // 완료: 수업 종료
   | "CANCELLED"; // 취소: 수업 취소
 
-export const LESSON_STATUS_MAP: Record<LessonStatus, string> = {
-  PENDING: "미배정",
-  ACCEPTED: "요청중",
-  CONTRACT_SIGNED: "확정",
-  UPDATED: "수정됨",
-  IN_PROGRESS: "진행중",
-  COMPLETED: "완료",
-  CANCELLED: "취소",
+export const LESSON_STATUS_MAP: Record<string, { label: string; color: any }> = {
+  PENDING: { label: "배정 대기", color: "warning" },
+  ACCEPTED: { label: "배정 수락", color: "info" },
+  CONTRACT_SIGNED: { label: "계약 완료", color: "primary" },
+  UPDATED: { label: "조건 변경", color: "secondary" },
+  IN_PROGRESS: { label: "진행 중", color: "success" },
+  COMPLETED: { label: "완료", color: "default" },
+  CANCELLED: { label: "취소", color: "error" },
 };
 
 // ============ Lesson Request Status Enum ============

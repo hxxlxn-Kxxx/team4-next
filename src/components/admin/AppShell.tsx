@@ -73,6 +73,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   // 초기 미읽음 카운트 조회 (30초마다 폴링)
   const refreshUnreadCount = useCallback(async () => {
+    // 채팅 드로어가 열려있을 때는 드로어 자체의 상태 업데이트를 우선시합니다.
+    if (isChatOpen) return;
     try {
       const data = await apiClient.getUnreadCount();
       const count = data?.unreadCount ?? data?.count ?? 0;
@@ -80,7 +82,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     } catch {
       // 인증 전이면 무시
     }
-  }, []);
+  }, [isChatOpen]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -256,14 +258,49 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <IconButton sx={{ color: 'text.secondary' }}>
                 <Search />
               </IconButton>
-              <IconButton onClick={() => setIsChatOpen(true)} sx={{ color: 'text.secondary' }}>
-                <Badge badgeContent={chatUnreadCount} color="error">
-                  <ChatBubble />
+              <IconButton 
+                onClick={() => setIsChatOpen(true)} 
+                sx={{ 
+                  color: 'text.secondary',
+                  bgcolor: 'white',
+                  transition: 'all 0.2s',
+                  '&:hover': { transform: 'scale(1.05)', bgcolor: '#FFF9EF' }
+                }}
+              >
+                <Badge 
+                  badgeContent={chatUnreadCount} 
+                  sx={{ 
+                    '& .MuiBadge-badge': { 
+                      bgcolor: '#251B10', 
+                      color: 'white',
+                      fontWeight: 700,
+                      border: '2px solid #FFF9EF'
+                    } 
+                  }}
+                >
+                  <ChatBubble fontSize="small" />
                 </Badge>
               </IconButton>
-              <IconButton sx={{ color: 'text.secondary' }}>
-                <Badge badgeContent={3} color="error">
-                  <Notifications />
+              <IconButton 
+                sx={{ 
+                  color: 'text.secondary',
+                  bgcolor: 'white',
+                  transition: 'all 0.2s',
+                  '&:hover': { transform: 'scale(1.05)', bgcolor: '#FFF9EF' }
+                }}
+              >
+                <Badge 
+                  badgeContent={3} 
+                  sx={{ 
+                    '& .MuiBadge-badge': { 
+                      bgcolor: '#F3C742', 
+                      color: '#251B10',
+                      fontWeight: 700,
+                      border: '2px solid #FFF9EF'
+                    } 
+                  }}
+                >
+                  <Notifications fontSize="small" />
                 </Badge>
               </IconButton>
               <IconButton

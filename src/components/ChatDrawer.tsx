@@ -9,6 +9,7 @@ import {
 import { Close, ArrowBack, Send } from "@mui/icons-material";
 import { io, Socket } from "socket.io-client";
 import { apiClient } from "@/src/lib/apiClient";
+import AtomButton from "@/src/components/atoms/AtomButton";
 
 // ─────────────────────────────────────────────
 // 타입
@@ -128,6 +129,8 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
           if (prev.some((m) => m.messageId === msg.messageId)) return prev;
           return [...prev, msg];
         });
+        // 현재 열린 방이면 서버에 읽음 처리 알림 (배지 동기화)
+        apiClient.readRoom(msg.roomId).catch(() => {});
       } else {
         // 다른 방 메시지 → unreadCount+1
         setRooms((prev) =>
@@ -211,8 +214,21 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     }
   }, []);
 
+  const isFirstScrollRef = useRef(true);
+
+  // 메시지 추가 시 하단 스크롤
+  useEffect(() => {
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: isFirstScrollRef.current ? "auto" : "smooth" 
+      });
+      isFirstScrollRef.current = false;
+    }
+  }, [messages]);
+
   // ── 방 선택
   const handleSelectRoom = async (room: ChatRoom) => {
+    isFirstScrollRef.current = true; // 대화방 진입 시 첫 스크롤은 즉시 이동
     setActiveRoom(room);
     setMessages([]);
     setNextCursor(null);
@@ -256,10 +272,6 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     }
   };
 
-  // 메시지 추가 시 하단 스크롤
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   const handleBack = () => {
     if (activeRoom) {
@@ -273,128 +285,261 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
   const activeRoomName = activeRoom ? getRoomDisplayName(activeRoom) : "";
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 400, display: "flex", flexDirection: "column", height: "100%" }}>
+    <Drawer 
+      anchor="right" 
+      open={open} 
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: { xs: '100vw', sm: 440 },
+          borderRadius: { sm: '32px 0 0 32px' },
+          overflow: 'hidden',
+          boxShadow: '-10px 0 30px rgba(37, 27, 16, 0.08)',
+        }
+      }}
+    >
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100%", bgcolor: '#FBF7ED' }}>
         {/* 헤더 */}
-        <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#1976d2", color: "white" }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box 
+          sx={{ 
+            p: 2.5, 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "space-between", 
+            background: 'linear-gradient(135deg, #FBF7ED 0%, #FFF9EF 100%)',
+            borderBottom: '1px solid',
+            borderColor: 'divider'
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
             {activeRoom && (
-              <IconButton color="inherit" onClick={handleBack} size="small">
-                <ArrowBack />
+              <IconButton 
+                onClick={handleBack} 
+                size="small"
+                sx={{ bgcolor: 'white', border: '1px solid #eee' }}
+              >
+                <ArrowBack fontSize="small" />
               </IconButton>
             )}
-            <Typography variant="h6" fontWeight="bold">
-              {activeRoom ? activeRoomName : "실시간 채팅"}
-            </Typography>
-          </Box>
-          <IconButton color="inherit" onClick={onClose} size="small">
-            <Close />
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800} color="#251B10">
+                {activeRoom ? activeRoomName : "메시지"}
+              </Typography>
+              {!activeRoom && (
+                <Typography variant="caption" color="text.secondary">
+                  {rooms.length}개의 대화
+                </Typography>
+              )}
+            </Box>
+          </Stack>
+          <IconButton 
+            onClick={onClose} 
+            size="small"
+            sx={{ bgcolor: 'white', border: '1px solid #eee' }}
+          >
+            <Close fontSize="small" />
           </IconButton>
         </Box>
 
         {/* 채팅방 목록 */}
         {!activeRoom && (
-          <>
+          <Box sx={{ flexGrow: 1, overflowY: "auto", px: 2, py: 2 }}>
             {isRoomsLoading ? (
-              <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+              <Box display="flex" justifyContent="center" py={10}><CircularProgress size={32} color="inherit" /></Box>
             ) : rooms.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
-                <Typography>채팅방이 없습니다.</Typography>
+              <Box sx={{ textAlign: "center", py: 12, opacity: 0.6 }}>
+                <Typography variant="body2">진행 중인 대화가 없습니다.</Typography>
               </Box>
             ) : (
-              <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+              <Stack spacing={1}>
                 {rooms.map((room) => {
                   const displayName = getRoomDisplayName(room);
                   const preview = room.lastMessage?.content ?? "";
                   const time = room.lastMessage?.sentAt
                     ? formatTime(room.lastMessage.sentAt)
                     : formatTime(room.updatedAt);
+                  const isUnread = room.unreadCount > 0;
+
                   return (
-                    <React.Fragment key={room.roomId}>
-                      <ListItemButton onClick={() => handleSelectRoom(room)} sx={{ py: 2 }}>
-                        <ListItemAvatar>
-                          <Avatar sx={{ bgcolor: room.unreadCount > 0 ? "primary.main" : "grey.400" }}>
+                    <ListItemButton 
+                      key={room.roomId}
+                      onClick={() => handleSelectRoom(room)} 
+                      sx={{ 
+                        py: 2, 
+                        px: 2,
+                        borderRadius: '20px',
+                        bgcolor: isUnread ? '#FFF9EF' : 'white',
+                        border: '1px solid',
+                        borderColor: isUnread ? '#EFD9A2' : 'transparent',
+                        boxShadow: isUnread ? '0 4px 12px rgba(243, 199, 66, 0.08)' : '0 2px 4px rgba(0,0,0,0.02)',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: isUnread ? '#FFF9EF' : '#F5F5F5',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 6px 16px rgba(0,0,0,0.04)',
+                        }
+                      }}
+                    >
+                      <ListItemAvatar>
+                        <Badge
+                          overlap="circular"
+                          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                          variant="dot"
+                          color="success"
+                          invisible={!isUnread}
+                          sx={{ '& .MuiBadge-badge': { border: '2px solid white' } }}
+                        >
+                          <Avatar 
+                            sx={{ 
+                              width: 48, 
+                              height: 48, 
+                              bgcolor: isUnread ? '#F3C742' : '#E8E8E8',
+                              color: isUnread ? '#251B10' : '#888',
+                              fontWeight: 700,
+                              fontSize: '1rem',
+                              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
+                            }}
+                          >
                             {displayName.charAt(0)}
                           </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                              <Typography fontWeight={room.unreadCount > 0 ? "bold" : "medium"}>
-                                {displayName}
-                              </Typography>
-                              <Typography variant="caption" color="textSecondary">{time}</Typography>
-                            </Box>
-                          }
-                          secondary={
-                            <Typography variant="body2" color="textSecondary" noWrap sx={{ mt: 0.5, pr: 2 }}>
+                        </Badge>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: 'center' }}>
+                            <Typography variant="body1" fontWeight={isUnread ? 800 : 600} color="#251B10">
+                              {displayName}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.8 }}>
+                              {time}
+                            </Typography>
+                          </Box>
+                        }
+                        secondary={
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              noWrap 
+                              sx={{ 
+                                maxWidth: '180px',
+                                fontWeight: isUnread ? 500 : 400,
+                                color: isUnread ? '#251B10' : '#666'
+                              }}
+                            >
                               {preview || "메시지 없음"}
                             </Typography>
-                          }
-                        />
-                        {room.unreadCount > 0 && (
-                          <Badge badgeContent={room.unreadCount} color="error" sx={{ mr: 2 }} />
-                        )}
-                      </ListItemButton>
-                      <Divider component="li" />
-                    </React.Fragment>
+                            {isUnread && (
+                              <Badge 
+                                badgeContent={room.unreadCount} 
+                                sx={{ 
+                                  '& .MuiBadge-badge': { 
+                                    bgcolor: '#251B10', 
+                                    color: 'white',
+                                    fontWeight: 700,
+                                    fontSize: '0.65rem'
+                                  } 
+                                }} 
+                              />
+                            )}
+                          </Box>
+                        }
+                      />
+                    </ListItemButton>
                   );
                 })}
-              </List>
+              </Stack>
             )}
-          </>
+          </Box>
         )}
 
-        {/* 메시지 목록 */}
+        {/* 메시지 상세 화면 */}
         {activeRoom && (
           <>
-            <Box sx={{ flexGrow: 1, overflowY: "auto", p: 2, bgcolor: "#f8f9fa" }}>
+            <Box 
+              sx={{ 
+                flexGrow: 1, 
+                overflowY: "auto", 
+                px: 2.5, 
+                py: 3, 
+                bgcolor: "#FFFFFF",
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
               {nextCursor && (
-                <Box textAlign="center" mb={1}>
-                  <Typography
-                    variant="caption" color="primary"
-                    sx={{ cursor: "pointer", textDecoration: "underline" }}
+                <Box textAlign="center" mb={2}>
+                  <AtomButton
+                    atomVariant="ghost"
+                    size="small"
                     onClick={() => fetchMessages(activeRoom.roomId, nextCursor)}
                   >
-                    이전 메시지 더 보기
-                  </Typography>
+                    이전 메시지 보기
+                  </AtomButton>
                 </Box>
               )}
+              
               {isMsgLoading && messages.length === 0 ? (
-                <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
+                <Box display="flex" justifyContent="center" py={10}><CircularProgress size={28} color="inherit" /></Box>
               ) : messages.length === 0 ? (
-                <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
-                  <Typography variant="body2">메시지가 없습니다.</Typography>
+                <Box sx={{ textAlign: "center", py: 10, opacity: 0.5 }}>
+                  <Typography variant="body2">나눈 대화가 여기에 표시됩니다.</Typography>
                 </Box>
               ) : (
-                <Stack spacing={2}>
-                  {messages.map((msg) => {
-                    const isAdmin =
-                      activeRoom.members.find((m) => m.userId === msg.senderUserId)?.role === "ADMIN";
+                <Stack spacing={2.5}>
+                  {messages.map((msg, idx) => {
+                    const isAdmin = activeRoom.members.find((m) => m.userId === msg.senderUserId)?.role === "ADMIN";
+                    const isSystem = msg.messageType === "SYSTEM";
+                    
+                    if (isSystem) {
+                      return (
+                        <Box key={msg.messageId} sx={{ textAlign: 'center', my: 1 }}>
+                          <Typography variant="caption" sx={{ bgcolor: '#F5F5F5', px: 1.5, py: 0.5, borderRadius: '10px', color: '#888' }}>
+                            {msg.content}
+                          </Typography>
+                        </Box>
+                      );
+                    }
+
                     return (
-                      <Box key={msg.messageId} sx={{ display: "flex", justifyContent: isAdmin ? "flex-end" : "flex-start" }}>
-                        <Paper
-                          elevation={0}
-                          sx={{
-                            p: 1.5, maxWidth: "75%", borderRadius: 3,
-                            bgcolor: isAdmin ? "primary.main" : "white",
-                            color: isAdmin ? "white" : "text.primary",
-                            border: isAdmin ? "none" : "1px solid #eee",
-                          }}
+                      <Box 
+                        key={msg.messageId} 
+                        sx={{ 
+                          display: "flex", 
+                          flexDirection: 'column',
+                          alignItems: isAdmin ? "flex-end" : "flex-start",
+                        }}
+                      >
+                        {!isAdmin && msg.senderName && (
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#251B10', mb: 0.5, ml: 1 }}>
+                            {msg.senderName}
+                          </Typography>
+                        )}
+                        <Stack 
+                          direction={isAdmin ? "row" : "row-reverse"} 
+                          spacing={1} 
+                          alignItems="flex-end"
                         >
-                          {!isAdmin && msg.senderName && (
-                            <Typography variant="caption" sx={{ fontWeight: 700, display: "block", mb: 0.5 }}>
-                              {msg.senderName}
-                            </Typography>
-                          )}
-                          <Typography variant="body2">{msg.content}</Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{ display: "block", mt: 0.5, textAlign: "right", color: isAdmin ? "rgba(255,255,255,0.7)" : "text.secondary" }}
-                          >
+                          <Typography variant="caption" sx={{ color: '#aaa', fontSize: '0.65rem', mb: 0.5 }}>
                             {formatTime(msg.sentAt)}
                           </Typography>
-                        </Paper>
+                          <Paper
+                            elevation={0}
+                            sx={{
+                              p: 1.75, 
+                              maxWidth: "280px", 
+                              borderRadius: isAdmin ? '20px 0 20px 20px' : '0 20px 20px 20px',
+                              bgcolor: isAdmin ? "#251B10" : "#F3F3F3",
+                              color: isAdmin ? "white" : "#251B10",
+                              boxShadow: isAdmin ? '0 4px 12px rgba(37, 27, 16, 0.15)' : 'none',
+                              position: 'relative'
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ lineHeight: 1.5, wordBreak: 'break-all' }}>
+                              {msg.content}
+                            </Typography>
+                          </Paper>
+                        </Stack>
                       </Box>
                     );
                   })}
@@ -404,21 +549,63 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
             </Box>
 
             {/* 입력창 */}
-            <Box sx={{ p: 2, bgcolor: "white", borderTop: "1px solid #eee", display: "flex", gap: 1 }}>
-              <TextField
-                fullWidth size="small" placeholder="메시지를 입력하세요..." variant="outlined"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                disabled={isSending}
-              />
-              <IconButton
-                color="primary" onClick={handleSend}
-                disabled={!inputText.trim() || isSending}
-                sx={{ bgcolor: "rgba(25, 118, 210, 0.1)" }}
+            <Box 
+              sx={{ 
+                p: 2.5, 
+                bgcolor: "white", 
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 -4px 12px rgba(0,0,0,0.03)'
+              }}
+            >
+              <Paper
+                elevation={0}
+                sx={{
+                  display: "flex", 
+                  alignItems: "center",
+                  bgcolor: '#FBF7ED',
+                  border: '1px solid #EFD9A2',
+                  borderRadius: '16px 0 16px 16px',
+                  px: 1.5,
+                  py: 0.5
+                }}
               >
-                {isSending ? <CircularProgress size={20} /> : <Send />}
-              </IconButton>
+                <TextField
+                  fullWidth 
+                  multiline
+                  maxRows={4}
+                  placeholder="메시지 입력..." 
+                  variant="standard"
+                  InputProps={{ disableUnderline: true }}
+                  sx={{ py: 1, px: 0.5 }}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => { 
+                    if (e.key === "Enter" && !e.shiftKey) { 
+                      e.preventDefault(); 
+                      handleSend(); 
+                    } 
+                  }}
+                  disabled={isSending}
+                />
+                <IconButton
+                  onClick={handleSend}
+                  disabled={!inputText.trim() || isSending}
+                  sx={{ 
+                    bgcolor: inputText.trim() ? "#251B10" : "transparent",
+                    color: inputText.trim() ? "white" : "#ccc",
+                    transition: 'all 0.3s',
+                    '&:hover': {
+                      bgcolor: '#443322'
+                    },
+                    ml: 1,
+                    width: 36,
+                    height: 36
+                  }}
+                >
+                  {isSending ? <CircularProgress size={18} color="inherit" /> : <Send sx={{ fontSize: 18 }} />}
+                </IconButton>
+              </Paper>
             </Box>
           </>
         )}

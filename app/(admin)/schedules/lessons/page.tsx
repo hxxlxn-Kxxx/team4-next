@@ -42,6 +42,8 @@ type LessonRow = {
   status: LessonStatus;
   sourceType?: LessonSourceType | null;
   requestedInstructorId?: string | null;
+  instructorName?: string;
+  requestedInstructorName?: string;
   requestedInstructor?: { 
     name: string;
   } | null;
@@ -416,7 +418,7 @@ export default function ClassManagementPage() {
                   </TableCell>
                   <TableCell align="center">{location}</TableCell>
                   <TableCell align="center">
-                   {lesson.requestedInstructor?.name || "미배정"}
+                   {lesson.instructorName || lesson.requestedInstructorName || lesson.requestedInstructor?.name || "미배정"}
                   </TableCell>
                   <TableCell align="center">{dateStr}</TableCell>
                   <TableCell align="center">

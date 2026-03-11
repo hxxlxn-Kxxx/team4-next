@@ -12,6 +12,7 @@ import {
   ArrowBack, CalendarMonth, LocationOn, Person, AttachMoney,
   People, Description, Edit, Block, Map,
   DirectionsWalk, Place, CheckCircle, AccessTime, MyLocation,
+  Refresh, AssignmentInd, InfoOutlined, AutoAwesome,
 } from "@mui/icons-material";
 import {
   LESSON_STATUS_MAP, type LessonStatus, LESSON_SOURCE_TYPE_MAP, type LessonSourceType,
@@ -160,25 +161,27 @@ function RecommendationsPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadRecs = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.getRecommendations(lessonId);
+      const list: Recommendation[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+      setRecs(list);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await apiClient.getRecommendations(lessonId);
-        const list: Recommendation[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data)
-          ? data.data
-          : [];
-        setRecs(list);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+    loadRecs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
 
   return (
@@ -200,11 +203,63 @@ function RecommendationsPanel({
       ) : error ? (
         <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
       ) : recs.length === 0 ? (
-        <Box sx={{ textAlign: "center", py: 6, bgcolor: "#f8f9fa", borderRadius: 2 }}>
-          <Typography color="text.secondary">추천 가능한 강사가 없습니다.</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            강사가 일정을 제출해야 추천 목록이 생성됩니다.
+        <Box sx={{ textAlign: "center", py: 8, px: 3, bgcolor: "#f8f9fa", borderRadius: 3, border: "1px dashed #E0E0E0" }}>
+          <Box sx={{ width: 48, height: 48, borderRadius: "50%", bgcolor: "#FFF", display: "grid", placeItems: "center", mx: "auto", mb: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.05)", color: "text.secondary" }}>
+            <AutoAwesome sx={{ fontSize: 24, opacity: 0.6 }} />
+          </Box>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>적합한 추천 강사를 찾지 못했습니다</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 4, maxWidth: 460, mx: "auto", lineHeight: 1.6 }}>
+            현재 조건(일정, 지역, 자격 요건 등)에 완벽히 부합하는 강사 풀이 부족하거나,
+            강사들이 아직 일정을 충분히 제출하지 않았을 수 있습니다.
           </Typography>
+
+          {/* 원인 안내 박스 */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center" sx={{ mb: 5 }}>
+            <Paper elevation={0} sx={{ p: 2, bgcolor: "#FFF", border: "1px solid #E8E8E8", borderRadius: 2, width: { xs: "100%", sm: "32%" } }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>가용 강사 부족</Typography>
+              <Typography variant="caption" color="text.secondary">동일 시간대 다른 수업에 배정되었거나 가능한 일정이 없습니다.</Typography>
+            </Paper>
+            <Paper elevation={0} sx={{ p: 2, bgcolor: "#FFF", border: "1px solid #E8E8E8", borderRadius: 2, width: { xs: "100%", sm: "32%" } }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>일정 제출 대기</Typography>
+              <Typography variant="caption" color="text.secondary">강사들이 아직 이번 주/달 일정을 확정하지 않았을 수 있습니다.</Typography>
+            </Paper>
+            <Paper elevation={0} sx={{ p: 2, bgcolor: "#FFF", border: "1px solid #E8E8E8", borderRadius: 2, width: { xs: "100%", sm: "32%" } }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>수업 조건 확인</Typography>
+              <Typography variant="caption" color="text.secondary">수업 장소나 요구 자격이 맞지 않거나 누락되었을 수 있습니다.</Typography>
+            </Paper>
+          </Stack>
+
+          {/* CTA 버튼들 */}
+          <Stack direction="row" spacing={1.5} justifyContent="center" flexWrap="wrap" gap={1}>
+            {!isCanceled && (
+              <Button 
+                variant="contained" 
+                startIcon={<AssignmentInd />}
+                onClick={onAssign}
+                sx={{ borderRadius: 2, px: 3, boxShadow: "none" }}
+              >
+                직접 배정하기
+              </Button>
+            )}
+            <Button 
+              variant="outlined" 
+              color="inherit"
+              startIcon={<InfoOutlined />}
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              sx={{ borderRadius: 2, borderColor: "#E0E0E0", color: "text.secondary" }}
+            >
+              수업 정보 확인
+            </Button>
+            <Button 
+              variant="text" 
+              color="inherit"
+              startIcon={<Refresh />}
+              onClick={loadRecs}
+              sx={{ borderRadius: 2, color: "text.secondary" }}
+            >
+              새로고침
+            </Button>
+          </Stack>
         </Box>
       ) : (
         <Stack spacing={2}>

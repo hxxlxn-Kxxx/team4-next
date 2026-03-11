@@ -938,7 +938,7 @@ export default function ClassDetailPage() {
                     <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Person fontSize="small" /> 담당 강사</Typography>
                     <Box display="flex" alignItems="center" gap={2}>
                       <Typography variant="body1" fontWeight="medium" color={isEditing ? "textSecondary" : "textPrimary"}>
-                        {lesson.instructorName || "현재 미배정 상태입니다."} {isEditing && "(강사 변경은 배정 기능을 이용해주세요)"}
+                        {lesson.instructorName || lesson.requestedInstructorName || "현재 미배정 상태입니다."} {isEditing && "(강사 변경은 배정 기능을 이용해주세요)"}
                       </Typography>
                       {!isCanceled && !isEditing && (
                         <Button variant="outlined" size="small" onClick={handleOpenAssignModal}>강사 배정하기</Button>

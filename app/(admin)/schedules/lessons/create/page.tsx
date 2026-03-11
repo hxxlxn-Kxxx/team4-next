@@ -10,6 +10,7 @@ import { ArrowBack, Save, AddBox, Search, CheckCircle } from "@mui/icons-materia
 
 // 💡 전담 우체국 임포트!
 import { apiClient } from "@/src/lib/apiClient";
+import { localDateTimeToUtcIso } from "@/src/lib/dateTime";
 
 export default function CreateLessonPage() {
   const router = useRouter();
@@ -34,7 +35,14 @@ export default function CreateLessonPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "startsAt" || name === "endsAt" ? { instructorId: "" } : {}),
+    }));
+    if (name === "startsAt" || name === "endsAt") {
+      setAvailableInstructors([]);
+    }
   };
 
   // 💡 DB 수업 장소 목록 조회
@@ -75,10 +83,16 @@ export default function CreateLessonPage() {
   // 💡 가용 강사 조회 (apiClient로 교체)
   useEffect(() => {
     const fetchInstructors = async () => {
-      if (!formData.startsAt || !formData.endsAt) return;
+      if (!formData.startsAt || !formData.endsAt) {
+        setAvailableInstructors([]);
+        return;
+      }
       const start = new Date(formData.startsAt);
       const end = new Date(formData.endsAt);
-      if (start >= end) return;
+      if (start >= end) {
+        setAvailableInstructors([]);
+        return;
+      }
 
       setIsFetchingInstructors(true);
       try {
@@ -111,8 +125,8 @@ export default function CreateLessonPage() {
       // 💡 1. 백엔드 요구사항에 맞춘 통합 Payload
       const payload = {
         ...formData,
-        startsAt: new Date(formData.startsAt).toISOString(),
-        endsAt: new Date(formData.endsAt).toISOString(),
+        startsAt: localDateTimeToUtcIso(formData.startsAt),
+        endsAt: localDateTimeToUtcIso(formData.endsAt),
         payAmount: Number(formData.payAmount),
         studentCount: Number(formData.studentCount),
         // DB 수업지 ID 및 위치 데이터 추가

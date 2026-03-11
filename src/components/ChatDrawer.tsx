@@ -120,6 +120,19 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
 
+  const clearActiveRoom = useCallback(() => {
+    const currentRoom = activeRoomRef.current;
+    if (currentRoom) {
+      socketRef.current?.emit("leave_room", { roomId: currentRoom.roomId });
+    }
+
+    activeRoomRef.current = null;
+    setActiveRoom(null);
+    setMessages([]);
+    setNextCursor(null);
+    setInputText("");
+  }, []);
+
   // ── WebSocket 연결
   useEffect(() => {
     const token = getToken();
@@ -263,12 +276,14 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
   };
 
   const handleBack = () => {
-    if (activeRoom) {
-      socketRef.current?.emit("leave_room", { roomId: activeRoom.roomId });
-    }
-    setActiveRoom(null);
-    setMessages([]);
+    clearActiveRoom();
     queryClient.invalidateQueries({ queryKey: queryKeys.chat.rooms });
+  };
+
+  const handleDrawerClose = () => {
+    clearActiveRoom();
+    queryClient.invalidateQueries({ queryKey: queryKeys.chat.rooms });
+    onClose();
   };
 
   const activeRoomName = activeRoom ? getRoomDisplayName(activeRoom) : "";
@@ -277,7 +292,7 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     <Drawer 
       anchor="right" 
       open={open} 
-      onClose={onClose}
+      onClose={handleDrawerClose}
       PaperProps={{
         sx: {
           width: { xs: '100vw', sm: 440 },
@@ -321,8 +336,8 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
               )}
             </Box>
           </Stack>
-          <IconButton 
-            onClick={onClose} 
+          <IconButton
+            onClick={handleDrawerClose}
             size="small"
             sx={{ bgcolor: 'white', border: '1px solid #eee' }}
           >

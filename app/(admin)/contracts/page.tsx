@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  Alert,
   Box,
   CircularProgress,
   Chip,
@@ -134,6 +135,10 @@ function formatDateTime(iso?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function getContractCanonicalId(row: ContractRow): string | null {
+  return row.contractId ?? row.id ?? null;
+}
+
 // ─────────────────────────────────────────────
 // 메인 컴포넌트 내부 로직 (Suspense용)
 // ─────────────────────────────────────────────
@@ -175,6 +180,7 @@ function ContractsContent() {
   });
 
   const contracts: ContractRow[] = contractsData || [];
+  const listError = error instanceof Error ? error.message : "계약 목록을 불러오지 못했습니다.";
 
   // 드로어 전용 상태
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -189,8 +195,9 @@ function ContractsContent() {
         (c.lesson as any)?.id === lessonIdParam || 
         (c as any).lessonId === lessonIdParam
       );
-      if (match) {
-        setSelectedId(match.id);
+      const canonicalId = match ? getContractCanonicalId(match) : null;
+      if (canonicalId) {
+        setSelectedId(canonicalId);
       }
     }
   }, [lessonIdParam, contracts, selectedId]);
@@ -398,6 +405,10 @@ function ContractsContent() {
         <Box display="flex" justifyContent="center" py={8}>
           <CircularProgress />
         </Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ borderRadius: "16px 0 16px 16px" }}>
+          {listError}
+        </Alert>
       ) : (
         <TableContainer component={SurfaceCard}>
           <Table>
@@ -420,7 +431,7 @@ function ContractsContent() {
                 </TableRow>
               ) : (
                 filtered.map((row) => {
-                  const cId = row.contractId ?? row.id;
+                  const cId = getContractCanonicalId(row) ?? `contract-row-${row.contractNumber ?? row.createdAt ?? "unknown"}`;
                   const rowStatus = row.status as ContractStatus;
                   return (
                     <TableRow key={cId} hover>

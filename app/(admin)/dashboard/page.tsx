@@ -130,27 +130,32 @@ export default function DashboardPage() {
         return { hasRecsCount: 0, topRecReadyCount: 0, firstLessonIdWithRec: null };
       }
 
-      let hasRecsCount = 0;
-      let topRecReadyCount = 0;
-      let firstLessonIdWithRec: string | null = null;
-
-      const promises = unassignedLessons.map(async (lesson: LessonRow) => {
+      const results = await Promise.all(unassignedLessons.map(async (lesson: LessonRow) => {
         try {
           const data = await apiClient.getRecommendations(lesson.lessonId);
           const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-          if (list.length > 0) {
-            if (!firstLessonIdWithRec) firstLessonIdWithRec = lesson.lessonId;
-            hasRecsCount++;
-            if (list[0].score >= 70 || list[0].confidenceLabel) {
-              topRecReadyCount++;
-            }
-          }
-        } catch (e) {
-          // 무시
-        }
-      });
+          const hasRecommendations = list.length > 0;
+          const topRecommendationReady =
+            hasRecommendations && Boolean(list[0].score >= 70 || list[0].confidenceLabel);
 
-      await Promise.all(promises);
+          return {
+            lessonId: lesson.lessonId,
+            hasRecommendations,
+            topRecommendationReady,
+          };
+        } catch (e) {
+          return {
+            lessonId: lesson.lessonId,
+            hasRecommendations: false,
+            topRecommendationReady: false,
+          };
+        }
+      }));
+
+      const hasRecsCount = results.filter((result) => result.hasRecommendations).length;
+      const topRecReadyCount = results.filter((result) => result.topRecommendationReady).length;
+      const firstLessonIdWithRec =
+        results.find((result) => result.hasRecommendations)?.lessonId ?? null;
 
       return { hasRecsCount, topRecReadyCount, firstLessonIdWithRec };
     },

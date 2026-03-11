@@ -3,13 +3,71 @@ import { ApiError } from "./apiError";
 
 // 백엔드 명세에는 API_URL이지만, 기존에 쓰시던 API_BASE_URL도 호환되게 함.
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const ACCESS_TOKEN_COOKIE = "accessToken";
+const REFRESH_TOKEN_COOKIE = "refreshToken";
+const ACCESS_TOKEN_MAX_AGE = 60 * 60;
+const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
+
+const setCookie = (name: string, value: string, maxAge: number) => {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax;`;
+};
+
+const clearCookie = (name: string) => {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax;`;
+};
+
+export const persistAuthSession = (accessToken: string, refreshToken?: string | null) => {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(ACCESS_TOKEN_COOKIE, accessToken);
+  setCookie(ACCESS_TOKEN_COOKIE, accessToken, ACCESS_TOKEN_MAX_AGE);
+
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_COOKIE, refreshToken);
+    setCookie(REFRESH_TOKEN_COOKIE, refreshToken, REFRESH_TOKEN_MAX_AGE);
+  }
+};
+
+export const clearAuthSession = () => {
+  if (typeof window === "undefined") return;
+
+  localStorage.removeItem(ACCESS_TOKEN_COOKIE);
+  localStorage.removeItem(REFRESH_TOKEN_COOKIE);
+  localStorage.removeItem("user");
+  clearCookie(ACCESS_TOKEN_COOKIE);
+  clearCookie(REFRESH_TOKEN_COOKIE);
+};
 
 const getToken = (): string | null => {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("accessToken");
+    return localStorage.getItem(ACCESS_TOKEN_COOKIE);
   }
   return null;
 };
+
+async function parseResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204 || response.status === 205) {
+    return null;
+  }
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength === "0") {
+    return null;
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
@@ -26,7 +84,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   let response = await fetch(url, { ...options, headers });
 
   if (response.status === 401 && typeof window !== "undefined") {
-    const refreshToken = localStorage.getItem("refreshToken");
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_COOKIE);
     
     if (refreshToken) {
       try {
@@ -38,12 +96,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         });
 
         if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          const newAccess = refreshData.data?.accessToken || refreshData.accessToken;
+          const refreshData = await parseResponseBody(refreshRes) as
+            | { data?: { accessToken?: string; refreshToken?: string }; accessToken?: string; refreshToken?: string }
+            | null;
+          const newAccess = refreshData?.data?.accessToken || refreshData?.accessToken;
+          const newRefresh = refreshData?.data?.refreshToken || refreshData?.refreshToken || refreshToken;
+
+          if (!newAccess) {
+            throw new Error("Refresh response missing access token");
+          }
           
-          // 새 토큰 저장 (로컬 + 쿠키)
-          localStorage.setItem("accessToken", newAccess);
-          document.cookie = `accessToken=${newAccess}; path=/; max-age=3600;`;
+          persistAuthSession(newAccess, newRefresh);
           
           // 막혔던 원래 요청에 새 토큰 끼워서 다시 보내기!
           headers.set("Authorization", `Bearer ${newAccess}`);
@@ -53,25 +116,36 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         }
       } catch (err) {
         // 재발급도 실패하면 토큰 다 지우고 쫓아내기
-        localStorage.clear();
-        document.cookie = "accessToken=; path=/; max-age=0;";
+        clearAuthSession();
         window.location.href = "/login";
       }
     } else {
       // 리프레시 토큰조차 없으면 쫓아내기
-      localStorage.clear();
-      document.cookie = "accessToken=; path=/; max-age=0;";
+      clearAuthSession();
       window.location.href = "/login";
     }
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, errorData.message || "API Error", errorData.code);
+    const errorData = await parseResponseBody(response);
+    if (errorData && typeof errorData === "object" && !Array.isArray(errorData)) {
+      const normalized = errorData as { message?: string; code?: string };
+      throw new ApiError(response.status, normalized.message || "API Error", normalized.code);
+    }
+
+    throw new ApiError(
+      response.status,
+      typeof errorData === "string" ? errorData : "API Error",
+    );
   }
 
-  const data = await response.json();
-  return data.data !== undefined ? data.data : data;
+  const data = await parseResponseBody(response);
+
+  if (data && typeof data === "object" && !Array.isArray(data) && "data" in data) {
+    return (data as { data: T }).data;
+  }
+
+  return data as T;
 }
 
 // 컴포넌트에서 가져다 쓸 실제 API 메서드들
@@ -90,8 +164,7 @@ export const apiClient = {
 
   logout: () => {
     if (typeof window !== "undefined") {
-      localStorage.clear();
-      document.cookie = "accessToken=; path=/; max-age=0;";
+      clearAuthSession();
       window.location.href = "/login";
     }
   },

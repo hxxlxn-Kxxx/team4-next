@@ -18,6 +18,10 @@ import SurfaceCard from "@/src/components/admin/SurfaceCard";
 import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
 import { apiClient } from "@/src/lib/apiClient";
+import {
+  localDateTimeToUtcIso,
+  utcIsoToLocalDateTimeInputValue,
+} from "@/src/lib/dateTime";
 
 export default function DocumentImportPage() {
   const router = useRouter();
@@ -83,8 +87,8 @@ export default function DocumentImportPage() {
         contractTitle: parsed.contractTitle || "",
         companyName: parsed.companyName || "",
         lectureTitle: parsed.lectureTitle || "",
-        startsAt: parsed.startsAt ? parsed.startsAt.slice(0, 16) : "", // datetime-local 형식 (YYYY-MM-DDTHH:mm)
-        endsAt: parsed.endsAt ? parsed.endsAt.slice(0, 16) : "",
+        startsAt: utcIsoToLocalDateTimeInputValue(parsed.startsAt),
+        endsAt: utcIsoToLocalDateTimeInputValue(parsed.endsAt),
         venueName: parsed.venueName || "",
         region: parsed.region || "",
         payAmount: parsed.payAmount ? String(parsed.payAmount) : "",
@@ -115,6 +119,8 @@ export default function DocumentImportPage() {
     try {
       const parsedJson = {
         ...formData,
+        startsAt: localDateTimeToUtcIso(formData.startsAt),
+        endsAt: localDateTimeToUtcIso(formData.endsAt),
         payAmount: formData.payAmount ? Number(formData.payAmount) : null,
       };
 

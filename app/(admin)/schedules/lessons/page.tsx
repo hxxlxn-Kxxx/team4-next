@@ -153,24 +153,10 @@ export default function ClassManagementPage() {
   const { data: instructorsData, isLoading: isFetchingInstructors } = useQuery({
     queryKey: ["instructors", "available", formData.startsAt, formData.endsAt],
     queryFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-      if (!token || !apiUrl) {
-        throw new Error("가용 강사 조회에 필요한 인증 정보가 없습니다.");
-      }
-
-      const response = await fetch(
-        `${apiUrl}/lessons/available-instructors?startsAt=${start.toISOString()}&endsAt=${end.toISOString()}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+      const data = await apiClient.getAvailableInstructors(
+        start.toISOString(),
+        end.toISOString(),
       );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "가용 강사 조회 실패");
-      }
-
-      const data = await response.json();
       return Array.isArray(data) ? data : data.data || [];
     },
     enabled: isDateValidForInstructors,
@@ -211,13 +197,6 @@ export default function ClassManagementPage() {
 
   const createLessonMutation = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem("accessToken");
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-      if (!token || !apiUrl) {
-        throw new Error("수업 생성에 필요한 인증 정보가 없습니다.");
-      }
-
       const createPayload = {
         lectureTitle: formData.lectureTitle,
         startsAt: new Date(formData.startsAt).toISOString(),
@@ -231,37 +210,11 @@ export default function ClassManagementPage() {
         deliveryNotes: formData.deliveryNotes || undefined,
       };
 
-      const createResponse = await fetch(`${apiUrl}/lessons`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(createPayload),
-      });
-
-      if (!createResponse.ok) {
-        const errorData = await createResponse.json().catch(() => ({}));
-        throw new Error(errorData.message || `수업 생성 실패 (${createResponse.status})`);
-      }
-
-      const createdData = await createResponse.json();
+      const createdData = await apiClient.createLesson(createPayload);
       const createdLesson: LessonRow = createdData.data || createdData;
 
       if (formData.instructorId) {
-        const assignResponse = await fetch(`${apiUrl}/lessons/${createdLesson.lessonId}/assign`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ instructorId: formData.instructorId }),
-        });
-
-        if (!assignResponse.ok) {
-          const errorData = await assignResponse.json().catch(() => ({}));
-          throw new Error(errorData.message || "수업 생성 후 강사 요청에 실패했습니다.");
-        }
+        await apiClient.assignInstructor(createdLesson.lessonId, formData.instructorId);
       }
     },
     onSuccess: () => {
@@ -364,7 +317,7 @@ export default function ClassManagementPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {classes.map((lesson: any) => {
+            {filteredClasses.map((lesson: any) => {
               const location = lesson.museum || lesson.venueName || lesson.region || "-";
               const instructor = lesson.requestedInstructorId || "미배정";
               

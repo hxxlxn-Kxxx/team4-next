@@ -21,6 +21,7 @@ import AtomBadge from "@/src/components/atoms/AtomBadge";
 import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
 import { apiClient } from "@/src/lib/apiClient";
+import { localDateAndTimeToUtcIso } from "@/src/lib/dateTime";
 
 interface AssignmentModalProps {
   open: boolean;
@@ -29,11 +30,6 @@ interface AssignmentModalProps {
 }
 
 const steps = ["기본 정보/시간", "장소 및 지도안", "강사 배정"];
-
-const convertToUTCISO8601 = (date: string, time: string): string => {
-  if (!date || !time) return "";
-  return `${date}T${time}:00Z`;
-};
 
 const START_TIME_OPTIONS = Array.from({ length: (22 - 8) * 2 + 1 }, (_, index) => {
   const hours = 8 + Math.floor(index / 2);
@@ -73,8 +69,14 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
   const [selectedInstructorId, setSelectedInstructorId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const clearInstructorSelection = () => {
+    setSelectedInstructorId("");
+    setAvailableInstructors([]);
+  };
+
   const handleStartTimeChange = (value: string) => {
     setStartTime(value);
+    clearInstructorSelection();
     if (!value) {
       setEndTime("");
       return;
@@ -82,6 +84,21 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
     const [hourString, minuteString] = value.split(":");
     const nextHour = (parseInt(hourString, 10) + 2) % 24;
     setEndTime(`${nextHour.toString().padStart(2, "0")}:${minuteString}`);
+  };
+
+  const handleLessonDateChange = (value: string) => {
+    setLessonDate(value);
+    clearInstructorSelection();
+  };
+
+  const handleEndTimeChange = (value: string) => {
+    setEndTime(value);
+    clearInstructorSelection();
+  };
+
+  const handleVenueSelect = (venue: any) => {
+    setSelectedVenue(venue);
+    clearInstructorSelection();
   };
 
   const resetState = () => {
@@ -93,6 +110,7 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
     setSearchQuery("");
     setSearchResults([]);
     setSelectedVenue(null);
+    setAvailableInstructors([]);
     setGuideUrl("");
     setRegion("");
     setMuseum("");
@@ -125,8 +143,8 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
   const fetchAvailableInstructors = async () => {
     setIsFetchingInstructors(true);
     try {
-      const startsAt = convertToUTCISO8601(lessonDate, startTime);
-      const endsAt = convertToUTCISO8601(lessonDate, endTime);
+      const startsAt = localDateAndTimeToUtcIso(lessonDate, startTime);
+      const endsAt = localDateAndTimeToUtcIso(lessonDate, endTime);
       const data = await apiClient.getAvailableInstructors(startsAt, endsAt);
       setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
@@ -151,8 +169,8 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
     try {
       const payload = {
         lectureTitle,
-        startsAt: convertToUTCISO8601(lessonDate, startTime),
-        endsAt: convertToUTCISO8601(lessonDate, endTime),
+        startsAt: localDateAndTimeToUtcIso(lessonDate, startTime),
+        endsAt: localDateAndTimeToUtcIso(lessonDate, endTime),
         venueName: selectedVenue.venueName,
         venueAddress: selectedVenue.venueAddress,
         venueLat: selectedVenue.venueLat,
@@ -214,12 +232,12 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
         <AtomInput type="number" label="배정 학생 수(명)" value={studentCount} onChange={(e) => setStudentCount(e.target.value)} placeholder="예: 10" fullWidth />
       </Stack>
 
-      <AtomInput type="date" label="날짜" value={lessonDate} onChange={(e) => setLessonDate(e.target.value)} fullWidth required />
+      <AtomInput type="date" label="날짜" value={lessonDate} onChange={(e) => handleLessonDateChange(e.target.value)} fullWidth required />
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <AtomInput select label="시작시간" value={startTime} onChange={(e) => handleStartTimeChange(e.target.value)} fullWidth required>
           {START_TIME_OPTIONS.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
         </AtomInput>
-        <AtomInput select label="종료시간" value={endTime} onChange={(e) => setEndTime(e.target.value)} fullWidth required>
+        <AtomInput select label="종료시간" value={endTime} onChange={(e) => handleEndTimeChange(e.target.value)} fullWidth required>
           {END_TIME_OPTIONS.map((opt) => (<MenuItem key={opt} value={opt}>{opt === "24:00" ? "24:00 (자정)" : opt}</MenuItem>))}
         </AtomInput>
       </Stack>
@@ -249,7 +267,7 @@ export default function AssignmentModal({ open, onClose, onSuccess }: Assignment
           {searchResults.map((place) => (
             <Box
               key={place.kakaoPlaceId}
-              onClick={() => setSelectedVenue(place)}
+              onClick={() => handleVenueSelect(place)}
               sx={{
                 p: 1.5, cursor: "pointer", borderRadius: 1,
                 bgcolor: selectedVenue?.kakaoPlaceId === place.kakaoPlaceId ? "#FFF8E1" : "transparent",

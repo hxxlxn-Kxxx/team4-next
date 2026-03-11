@@ -88,6 +88,20 @@ function formatTime(iso: string): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function getSettlementRowKey(row: SettlementMonthly): string {
+  const lessonIds = (row.items ?? [])
+    .map((item) => item.lessonId)
+    .filter(Boolean)
+    .sort()
+    .join(",");
+
+  return [
+    row.month,
+    row.instructorId ?? row.instructorName ?? "unknown-instructor",
+    lessonIds || "no-lessons",
+  ].join(":");
+}
+
 // ─────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────
@@ -239,7 +253,7 @@ export default function SettlementPage() {
             </TableHead>
             <TableBody>
               {settlements.map((row) => {
-                const rowKey = `${row.instructorId ?? row.month}-${row.month}`;
+                const rowKey = getSettlementRowKey(row);
                 const isExpanded = expandedRows[rowKey] ?? false;
                 const bonusStr = manualBonus[rowKey] ?? "";
                 const bonus = Number(bonusStr) || 0;

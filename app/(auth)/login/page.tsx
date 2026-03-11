@@ -13,7 +13,7 @@ import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSetting
 import ArrowOutwardRoundedIcon from "@mui/icons-material/ArrowOutwardRounded";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { useRouter } from "next/navigation";
-import { apiClient } from "@/src/lib/apiClient";
+import { apiClient, persistAuthSession } from "@/src/lib/apiClient";
 
 import SurfaceCard from "@/src/components/admin/SurfaceCard";
 import AtomBadge from "@/src/components/atoms/AtomBadge";
@@ -51,13 +51,8 @@ export default function LoginPage() {
       // const data = await apiClient.postAuthGoogle(email);
       const data = await apiClient.postAuthDemo(email);
       
-      localStorage.setItem("accessToken", data.accessToken);
-      if (data.refreshToken) {
-        localStorage.setItem("refreshToken", data.refreshToken);
-      }
+      persistAuthSession(data.accessToken, data.refreshToken);
       localStorage.setItem("user", JSON.stringify(data.user || {}));
-
-      document.cookie = `accessToken=${data.accessToken}; path=/; max-age=3600;`;
 
       router.push("/dashboard");
     } catch (error: any) {

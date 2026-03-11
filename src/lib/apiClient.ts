@@ -98,6 +98,14 @@ export const apiClient = {
   getInstructors: () => 
     request<any>("/instructors"),
 
+  // 강사 운영 리스트 - GET /instructors/operations?month=YYYY-MM
+  getInstructorOperations: (month: string) =>
+    request<any>(`/instructors/operations?month=${month}`),
+
+  // 강사 주간 가용성 매트릭스 - GET /instructors/weekly-availability?startDate=YYYY-MM-DD
+  getInstructorWeeklyAvailability: (startDate: string) =>
+    request<any>(`/instructors/weekly-availability?startDate=${startDate}`),
+
   // --- Contracts ---
   getContracts: (params?: string) => request<any>(`/contracts${params ? `?${params}` : ""}`),
   getContractById: (contractId: string) => request<any>(`/contracts/${contractId}`),

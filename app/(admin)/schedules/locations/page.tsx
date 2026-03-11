@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
-  CircularProgress, Alert, InputLabel, FormControl, Select, Typography, Stack
+  CircularProgress, Alert, InputLabel, FormControl, Select, Typography, Stack, Paper, Divider
 } from "@mui/material";
 import { Add, LocationOn, Search, Edit } from "@mui/icons-material";
 
@@ -62,7 +62,42 @@ export default function LocationManagementPage() {
     contactPerson: "",
     guideNotionUrl: "",
     locationStatus: "ACTIVE",
+    lat: null as number | null,
+    lng: null as number | null,
+    kakaoPlaceId: null as string | null,
   });
+
+  // 카카오 장소 검색 상태
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchingVenue, setIsSearchingVenue] = useState(false);
+
+  const handleSearchVenue = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearchingVenue(true);
+    try {
+      const results = await apiClient.searchVenue(searchQuery);
+      setSearchResults(Array.isArray(results) ? results : results.data || []);
+    } catch (error) {
+      console.error("장소 검색 에러:", error);
+      alert("장소를 검색하는 중 오류가 발생했습니다.");
+    } finally {
+      setIsSearchingVenue(false);
+    }
+  };
+
+  const handleSelectVenue = (place: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      locationName: place.placeName,
+      address: place.roadAddressName || place.addressName,
+      lat: place.lat,
+      lng: place.lng,
+      kakaoPlaceId: place.kakaoPlaceId,
+    }));
+    setSearchResults([]);
+    setSearchQuery("");
+  };
 
   const fetchLocations = useCallback(async () => {
     setIsLoading(true);
@@ -97,6 +132,9 @@ export default function LocationManagementPage() {
         contactPerson: loc.contactPerson || "",
         guideNotionUrl: loc.guideNotionUrl || "",
         locationStatus: loc.locationStatus,
+        lat: (loc as any).lat || null,
+        lng: (loc as any).lng || null,
+        kakaoPlaceId: (loc as any).kakaoPlaceId || null,
       });
     } else {
       setEditingId(null);
@@ -106,8 +144,13 @@ export default function LocationManagementPage() {
         contactPerson: "",
         guideNotionUrl: "",
         locationStatus: "ACTIVE",
+        lat: null,
+        lng: null,
+        kakaoPlaceId: null,
       });
     }
+    setSearchResults([]);
+    setSearchQuery("");
     setIsModalOpen(true);
   };
 
@@ -133,6 +176,9 @@ export default function LocationManagementPage() {
         contactPerson: formData.contactPerson || null,
         guideNotionUrl: formData.guideNotionUrl || null,
         locationStatus: formData.locationStatus,
+        lat: formData.lat,
+        lng: formData.lng,
+        kakaoPlaceId: formData.kakaoPlaceId,
       };
 
       if (editingId) {
@@ -263,6 +309,71 @@ export default function LocationManagementPage() {
         <DialogTitle fontWeight="bold">{editingId ? "수업지(장소) 상세/수정" : "새 장소 등록"}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3}>
+            {/* 카카오 장소 검색 (새 장소 등록일 때 또는 수정 시 필요할 때) */}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                카카오 장소 검색 (선택)
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <TextField 
+                  label="장소 검색 (예: 국립중앙박물관)" 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  fullWidth 
+                  size="small"
+                  onKeyDown={(e) => {
+                    // prevent form submission on Enter in standard way or handle search
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearchVenue();
+                    }
+                  }}
+                  InputProps={{
+                    endAdornment: isSearchingVenue ? <CircularProgress size={20} /> : null
+                  }}
+                />
+                <AtomButton onClick={handleSearchVenue} disabled={isSearchingVenue || !searchQuery} sx={{ minWidth: 80 }}>
+                  <Search />
+                </AtomButton>
+              </Stack>
+              {searchResults.length > 0 && (
+                <Paper 
+                  elevation={0}
+                  sx={{ 
+                    mt: 1, 
+                    maxHeight: 200, 
+                    overflowY: "auto", 
+                    border: "1px solid #e0e0e0",
+                    borderRadius: 1
+                  }}
+                >
+                  <Stack divider={<Divider flexItem />}>
+                    {searchResults.map((place) => (
+                      <Box
+                        key={place.kakaoPlaceId}
+                        onClick={() => handleSelectVenue(place)}
+                        sx={{ 
+                          p: 1.5, 
+                          cursor: "pointer", 
+                          "&:hover": { bgcolor: "#f9f9f9" },
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 0.5
+                        }}
+                      >
+                        <Typography variant="body2" fontWeight="bold" sx={{ lineHeight: 1.2 }}>
+                          {place.placeName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                          {place.roadAddressName || place.addressName}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Paper>
+              )}
+            </Box>
+
             <TextField
               label="장소명 (*필수)"
               name="locationName"

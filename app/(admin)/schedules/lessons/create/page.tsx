@@ -20,10 +20,10 @@ export default function CreateLessonPage() {
   const [availableInstructors, setAvailableInstructors] = useState<any[]>([]);
   const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
 
-  // 장소 검색 State 💡
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearchingVenue, setIsSearchingVenue] = useState(false);
+  // DB 저장된 장소 (운영중)
+  const [locations, setLocations] = useState<any[]>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedVenue, setSelectedVenue] = useState<any>(null);
 
   const initialFormState = {
@@ -37,30 +37,39 @@ export default function CreateLessonPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 💡 장소 검색 핸들러
-  const handleSearchVenue = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearchingVenue(true);
-    try {
-      const results = await apiClient.searchVenue(searchQuery);
-      setSearchResults(Array.isArray(results) ? results : results.data || []);
-    } catch (error) {
-      console.error("장소 검색 에러:", error);
-      alert("장소를 검색하는 중 오류가 발생했습니다.");
-    } finally {
-      setIsSearchingVenue(false);
-    }
-  };
+  // 💡 DB 수업 장소 목록 조회
+  useEffect(() => {
+    const fetchLocations = async () => {
+      setIsLoadingLocations(true);
+      try {
+        const data = await apiClient.getLessonLocations({ status: "ACTIVE" });
+        setLocations(Array.isArray(data) ? data : data.data || []);
+      } catch (error) {
+        console.error("장소 목록 조회 에러:", error);
+      } finally {
+        setIsLoadingLocations(false);
+      }
+    };
+    fetchLocations();
+  }, []);
 
-  // 💡 장소 선택 시 폼 자동 채우기 (UX 디테일)
-  const handleSelectVenue = (place: any) => {
+  // 💡 장소 선택 시 폼 자동 채우기
+  const handleSelectVenue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const locId = e.target.value;
+    setSelectedLocationId(locId);
+
+    const place = locations.find(l => l.locationId === locId);
+    if (!place) {
+      setSelectedVenue(null);
+      return;
+    }
+
     setSelectedVenue(place);
     setFormData((prev) => ({
       ...prev,
-      museum: place.venueName,
-      region: place.venueAddress.split(" ")[0] || prev.region, // 주소의 첫 부분(예: 서울, 경기)을 지역으로!
+      museum: place.locationName,
+      region: place.address ? place.address.split(" ")[0] : prev.region,
     }));
-    setSearchResults([]); // 선택 후 리스트 닫기
   };
 
   // 💡 가용 강사 조회 (apiClient로 교체)
@@ -106,12 +115,13 @@ export default function CreateLessonPage() {
         endsAt: new Date(formData.endsAt).toISOString(),
         payAmount: Number(formData.payAmount),
         studentCount: Number(formData.studentCount),
-        // 장소 검색 데이터 추가
-        venueName: selectedVenue.venueName,
-        venueAddress: selectedVenue.venueAddress,
-        venueLat: selectedVenue.venueLat,
-        venueLng: selectedVenue.venueLng,
-        kakaoPlaceId: selectedVenue.kakaoPlaceId,
+        // DB 수업지 ID 및 위치 데이터 추가
+        // lesson-locations API를 통해 받아온 위치는 lat, lng, kakaoPlaceId 등을 가지고 있음
+        venueName: selectedVenue.locationName,
+        venueAddress: selectedVenue.address,
+        venueLat: typeof selectedVenue.lat === "number" ? selectedVenue.lat : selectedVenue.venueLat || null,
+        venueLng: typeof selectedVenue.lng === "number" ? selectedVenue.lng : selectedVenue.venueLng || null,
+        kakaoPlaceId: selectedVenue.kakaoPlaceId || null,
       };
 
       // 💡 2. 수업 생성 (apiClient 사용)
@@ -129,7 +139,7 @@ export default function CreateLessonPage() {
         // 연속 등록 시 상태 초기화
         setFormData(initialFormState);
         setSelectedVenue(null);
-        setSearchQuery("");
+        setSelectedLocationId("");
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         router.push("/schedules/lessons");
@@ -159,40 +169,25 @@ export default function CreateLessonPage() {
             <TextField label="수업명" name="lectureTitle" value={formData.lectureTitle} onChange={handleChange} fullWidth required autoFocus />
           </Grid>
           
-          {/* 💡 카카오 장소 검색 UI 추가 */}
+          {/* 💡 선택된 수업지 정보 UI 추가 */}
           <Grid size={{ xs: 12 }}>
-            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>수업 장소 검색 (카카오)</Typography>
-            <Stack direction="row" spacing={1}>
-              <TextField 
-                label="장소 검색 (예: 국립중앙박물관)" 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                fullWidth 
-                onKeyPress={(e) => e.key === 'Enter' && handleSearchVenue()}
-                InputProps={{
-                  endAdornment: isSearchingVenue ? <CircularProgress size={20} /> : null
-                }}
-              />
-              <Button variant="contained" onClick={handleSearchVenue} disabled={isSearchingVenue || !searchQuery} sx={{ minWidth: 100 }}>
-                <Search />
-              </Button>
-            </Stack>
-
-            {/* 검색 결과 리스트 */}
-            {searchResults.length > 0 && (
-              <Paper sx={{ mt: 1, maxHeight: 200, overflowY: "auto", border: "1px solid #e0e0e0" }}>
-                {searchResults.map((place) => (
-                  <Box
-                    key={place.kakaoPlaceId}
-                    onClick={() => handleSelectVenue(place)}
-                    sx={{ p: 2, cursor: "pointer", "&:hover": { bgcolor: "#f5f5f5" }, borderBottom: "1px solid #eee" }}
-                  >
-                    <Typography variant="body1" fontWeight="bold">{place.venueName}</Typography>
-                    <Typography variant="body2" color="text.secondary">{place.venueAddress}</Typography>
-                  </Box>
-                ))}
-              </Paper>
-            )}
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>수업 장소 선택</Typography>
+            <TextField
+              select
+              label="DB 등록된 장소 선택 (*필수)"
+              value={selectedLocationId}
+              onChange={handleSelectVenue}
+              fullWidth
+              disabled={isLoadingLocations}
+              helperText={isLoadingLocations ? "장소 목록을 불러오는 중입니다..." : ""}
+            >
+              <MenuItem value="" disabled>장소를 선택해주세요</MenuItem>
+              {locations.map((loc) => (
+                <MenuItem key={loc.locationId} value={loc.locationId}>
+                  {loc.locationName} ({loc.address})
+                </MenuItem>
+              ))}
+            </TextField>
 
             {/* 선택된 장소 표시 */}
             {selectedVenue && (
@@ -200,7 +195,7 @@ export default function CreateLessonPage() {
                 <CheckCircle color="success" />
                 <Box>
                   <Typography variant="body2" fontWeight="bold" color="success.main">장소가 선택되었습니다.</Typography>
-                  <Typography variant="body1">{selectedVenue.venueName} <Typography component="span" variant="caption" color="text.secondary">({selectedVenue.venueAddress})</Typography></Typography>
+                  <Typography variant="body1">{selectedVenue.locationName} <Typography component="span" variant="caption" color="text.secondary">({selectedVenue.address})</Typography></Typography>
                 </Box>
               </Box>
             )}

@@ -12,10 +12,11 @@ import {
   ArrowBack, CalendarMonth, LocationOn, Person, AttachMoney,
   People, Description, Edit, Block, Map,
   DirectionsWalk, Place, CheckCircle, AccessTime, MyLocation,
-  Refresh, AssignmentInd, InfoOutlined, AutoAwesome, ExpandMore, ExpandLess, BugReport,
+  Refresh, AssignmentInd, InfoOutlined, AutoAwesome, ExpandMore, ExpandLess, BugReport, VerifiedUser,
 } from "@mui/icons-material";
 import {
   LESSON_STATUS_MAP, type LessonStatus, LESSON_SOURCE_TYPE_MAP, type LessonSourceType,
+  CONTRACT_STATUS_MAP, type ContractStatus, getContractStatusColor,
 } from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
 
@@ -680,6 +681,28 @@ export default function ClassDetailPage() {
     guideNotionUrl: "", lessonDetails: "", deliveryNotes: "",
   });
 
+  const [associatedContract, setAssociatedContract] = useState<any | null>(null);
+  const [isFetchingContract, setIsFetchingContract] = useState(false);
+
+  const fetchAssociatedContract = useCallback(async () => {
+    if (!id) return;
+    setIsFetchingContract(true);
+    try {
+      // lessonId로 계약 필터링 조회 (서버 사양에 따라 다를 수 있으나 lessonId 쿼리 활용)
+      const data = await apiClient.getContracts(`lessonId=${id}`);
+      const contracts = Array.isArray(data) ? data : data.data || [];
+      if (contracts.length > 0) {
+        setAssociatedContract(contracts[0]);
+      } else {
+        setAssociatedContract(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch associated contract:", err);
+    } finally {
+      setIsFetchingContract(false);
+    }
+  }, [id]);
+
   const fetchLessonDetail = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -693,8 +716,11 @@ export default function ClassDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (id) fetchLessonDetail();
-  }, [id, fetchLessonDetail]);
+    if (id) {
+      fetchLessonDetail();
+      fetchAssociatedContract();
+    }
+  }, [id, fetchLessonDetail, fetchAssociatedContract]);
 
   const handleOpenAssignModal = async () => {
     if (!lesson?.startsAt || !lesson?.endsAt) return alert("수업 시간이 없어 강사 목록을 조회할 수 없습니다.");
@@ -722,6 +748,7 @@ export default function ClassDetailPage() {
       setIsAssignModalOpen(false);
       setSelectedInstructorId("");
       fetchLessonDetail();
+      fetchAssociatedContract(); // 수락 후 자동 생성된 계약이 있을 수 있으므로 연동 조회
     } catch (err: unknown) {
       alert(`배정 요청 실패: ${getErrorMessage(err)}`);
     } finally {
@@ -945,6 +972,37 @@ export default function ClassDetailPage() {
                       )}
                     </Box>
                   </Box>
+                  {/* 자동 생성 계약 정보 노출 */}
+                  {!isEditing && (
+                    <Box>
+                      <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5} mb={0.5}><Description fontSize="small" /> 연동 계약서</Typography>
+                      <Box display="flex" alignItems="center" gap={2}>
+                        {isFetchingContract ? (
+                          <CircularProgress size={16} />
+                        ) : associatedContract ? (
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Chip 
+                              label={`계약: ${CONTRACT_STATUS_MAP[associatedContract.status as ContractStatus] || associatedContract.status}`} 
+                              size="small"
+                              color={getContractStatusColor(associatedContract.status as ContractStatus)}
+                              sx={{ fontWeight: "bold" }}
+                            />
+                            <Button 
+                              variant="text" 
+                              size="small" 
+                              onClick={() => router.push(`/contracts?lessonId=${lessonId}`)}
+                              startIcon={<VerifiedUser fontSize="small" />}
+                              sx={{ py: 0 }}
+                            >
+                              계약 관리로 이동
+                            </Button>
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="textSecondary">생성된 계약이 없습니다.</Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
                 </Stack>
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>

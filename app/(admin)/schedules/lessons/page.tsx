@@ -30,6 +30,8 @@ import AtomInput from "@/src/components/atoms/AtomInput";
 import type { LessonStatus, LessonSourceType } from "@/src/types/backend";
 import { LESSON_STATUS_MAP, LESSON_SOURCE_TYPE_MAP } from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
 
 type LessonRow = {
   lessonId: string;
@@ -118,89 +120,68 @@ export default function ClassManagementPage() {
   const [searchName, setSearchName] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingList, setIsLoadingList] = useState(true);
-  const [classes, setClasses] = useState<LessonRow[]>([]);
-  const [availableInstructors, setAvailableInstructors] = useState<AvailableInstructor[]>([]);
-  const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
-  const [listError, setListError] = useState("");
-  const [formData, setFormData] = useState<LessonFormData>(initialFormData);
-
   const router = useRouter();
 
-  const fetchLessons = useCallback(async () => {
-    setIsLoadingList(true);
-    setListError("");
-
-    try {
-      const queryString = filterStatus !== "ALL" ? `status=${filterStatus}` : "";
+  // ── 데이터 로드 (React Query)
+  const queryString = filterStatus !== "ALL" ? `status=${filterStatus}` : "";
+  const { data: classes = [], isLoading: isLoadingList, error } = useQuery({
+    queryKey: queryKeys.lessons.list({ status: filterStatus }),
+    queryFn: async () => {
       const data = await apiClient.getLessons(queryString);
-
       const rows = Array.isArray(data) ? data : data.data || data.items || [];
-      const normalizedName = searchName.trim();
-      const filteredRows = normalizedName
-        ? rows.filter((row: LessonRow) => row.lectureTitle.includes(normalizedName))
-        : rows;
+      return rows;
+    },
+  });
 
-      setClasses(filteredRows);
-    } catch (error: any) {
-      console.error("lessons list error:", error);
-      setClasses([]);
-      setListError(error.message || "수업 목록을 불러오지 못했습니다.");
-    } finally {
-      setIsLoadingList(false);
+  const listError = error instanceof Error ? error.message : "";
+
+  // 검색어 필터링 (클라이언트)
+  const filteredClasses = searchName.trim()
+    ? classes.filter((row: LessonRow) => row.lectureTitle.includes(searchName.trim()))
+    : classes;
+
+
+  const [availableInstructors, setAvailableInstructors] = useState<AvailableInstructor[]>([]);
+  const [formData, setFormData] = useState<LessonFormData>(initialFormData);
+
+  const start = new Date(formData.startsAt);
+  const end = new Date(formData.endsAt);
+  const isDateValidForInstructors =
+    Boolean(formData.startsAt) && Boolean(formData.endsAt) && start < end;
+
+  // 가용 강사 조회 (React Query)
+  const { data: instructorsData, isLoading: isFetchingInstructors } = useQuery({
+    queryKey: ["instructors", "available", formData.startsAt, formData.endsAt],
+    queryFn: async () => {
+      const token = localStorage.getItem("accessToken");
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!token || !apiUrl) {
+        throw new Error("가용 강사 조회에 필요한 인증 정보가 없습니다.");
+      }
+
+      const response = await fetch(
+        `${apiUrl}/lessons/available-instructors?startsAt=${start.toISOString()}&endsAt=${end.toISOString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "가용 강사 조회 실패");
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : data.data || [];
+    },
+    enabled: isDateValidForInstructors,
+    placeholderData: [],
+  });
+
+  useEffect(() => {
+    if (instructorsData) {
+      setAvailableInstructors(instructorsData);
     }
-  }, [filterStatus, searchName]);
-
-  useEffect(() => {
-    fetchLessons();
-  }, [fetchLessons]);
-
-  useEffect(() => {
-    const fetchInstructors = async () => {
-      if (!formData.startsAt || !formData.endsAt) {
-        setAvailableInstructors([]);
-        return;
-      }
-
-      const start = new Date(formData.startsAt);
-      const end = new Date(formData.endsAt);
-      if (start >= end) {
-        setAvailableInstructors([]);
-        return;
-      }
-
-      setIsFetchingInstructors(true);
-      try {
-        const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-        if (!token || !apiUrl) {
-          throw new Error("가용 강사 조회에 필요한 인증 정보가 없습니다.");
-        }
-
-        const response = await fetch(
-          `${apiUrl}/lessons/available-instructors?startsAt=${start.toISOString()}&endsAt=${end.toISOString()}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "가용 강사 조회 실패");
-        }
-
-        const data = await response.json();
-        const rows = Array.isArray(data) ? data : data.data || [];
-        setAvailableInstructors(rows);
-      } catch (error) {
-        console.error("available instructors error:", error);
-        setAvailableInstructors([]);
-      } finally {
-        setIsFetchingInstructors(false);
-      }
-    };
-
-    fetchInstructors();
-  }, [formData.startsAt, formData.endsAt]);
+  }, [instructorsData]);
 
   const handleChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -226,12 +207,10 @@ export default function ClassManagementPage() {
   );
   const isFormValid = isRequiredFilled && isDateValid;
 
-  const handleSubmit = async () => {
-    if (!isFormValid) return;
+  const queryClient = useQueryClient();
 
-    setIsSubmitting(true);
-
-    try {
+  const createLessonMutation = useMutation({
+    mutationFn: async () => {
       const token = localStorage.getItem("accessToken");
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -284,16 +263,22 @@ export default function ClassManagementPage() {
           throw new Error(errorData.message || "수업 생성 후 강사 요청에 실패했습니다.");
         }
       }
-
+    },
+    onSuccess: () => {
       setIsDrawerOpen(false);
       setFormData(initialFormData);
-      fetchLessons();
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+    },
+    onError: (error) => {
       console.error("lesson create error:", error);
-      setListError(error instanceof Error ? error.message : "수업 생성에 실패했습니다.");
-    } finally {
-      setIsSubmitting(false);
-    }
+      alert(error instanceof Error ? error.message : "수업 생성에 실패했습니다.");
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!isFormValid) return;
+    createLessonMutation.mutate();
   };
 
   return (
@@ -340,7 +325,7 @@ export default function ClassManagementPage() {
             </MenuItem>
           ))}
         </AtomInput>
-        <AtomButton startIcon={<Search />} onClick={fetchLessons}>
+        <AtomButton startIcon={<Search />}>
           검색
         </AtomButton>
       </FilterBar>
@@ -379,7 +364,7 @@ export default function ClassManagementPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {classes.map((lesson) => {
+            {classes.map((lesson: any) => {
               const location = lesson.museum || lesson.venueName || lesson.region || "-";
               const instructor = lesson.requestedInstructorId || "미배정";
               
@@ -616,12 +601,12 @@ export default function ClassManagementPage() {
               atomVariant="outline"
               sx={{ flex: 1 }}
               onClick={() => setIsDrawerOpen(false)}
-              disabled={isSubmitting}
+              disabled={createLessonMutation.isPending}
             >
               취소
             </AtomButton>
-            <AtomButton sx={{ flex: 1 }} onClick={handleSubmit} disabled={!isFormValid || isSubmitting}>
-              {isSubmitting ? <CircularProgress size={22} color="inherit" /> : "수업 등록하기"}
+            <AtomButton sx={{ flex: 1 }} onClick={handleSubmit} disabled={!isFormValid || createLessonMutation.isPending}>
+              {createLessonMutation.isPending ? <CircularProgress size={22} color="inherit" /> : "수업 등록하기"}
             </AtomButton>
           </Box>
         </Box>

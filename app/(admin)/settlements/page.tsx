@@ -31,6 +31,8 @@ import SurfaceCard from "@/src/components/admin/SurfaceCard";
 import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
 import { apiClient } from "@/src/lib/apiClient";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
 
 // ─────────────────────────────────────────────
 // 타입 (backend SettlementMonthlyDto 기반)
@@ -95,18 +97,10 @@ export default function SettlementPage() {
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   );
 
-  // API 데이터
-  const [settlements, setSettlements] = useState<SettlementMonthly[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // 수동 수당 입력 상태 (rowKey → 금액 문자열)
+  // 드롭다운 등 부가 상태
   const [manualBonus, setManualBonus] = useState<Record<string, string>>({});
-
-  // 상세 펼침 상태 (rowKey → boolean)
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-  // ── 월 이동 핸들러
   const goMonth = (delta: number) => {
     setCurrentMonth((prev) => {
       const next = new Date(prev);
@@ -115,29 +109,26 @@ export default function SettlementPage() {
     });
   };
 
-  // ── 데이터 fetch
-  const fetchSettlements = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const monthStr = toYearMonth(currentMonth);
+  const monthStr = toYearMonth(currentMonth);
+
+  const {
+    data: settlementsData,
+    isLoading,
+    error: queryError
+  } = useQuery({
+    queryKey: queryKeys.settlements.list({ month: monthStr }),
+    queryFn: async () => {
       const data = await apiClient.getSettlements(monthStr);
-      const list: SettlementMonthly[] = Array.isArray(data)
+      return Array.isArray(data)
         ? data
         : Array.isArray(data?.data)
         ? data.data
         : [];
-      setSettlements(list);
-    } catch (err: any) {
-      setError(err.message || "정산 데이터를 불러오지 못했습니다.");
-    } finally {
-      setIsLoading(false);
     }
-  }, [currentMonth]);
+  });
 
-  useEffect(() => {
-    fetchSettlements();
-  }, [fetchSettlements]);
+  const settlements: SettlementMonthly[] = settlementsData || [];
+  const error = queryError ? "정산 데이터를 불러오지 못했습니다." : null;
 
   // ── Summary 계산 (실데이터 기반)
   const totalGross = settlements.reduce((s, r) => s + (r.grossAmount ?? 0), 0);

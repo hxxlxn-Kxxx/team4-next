@@ -8,7 +8,9 @@ import {
 } from "@mui/material";
 import { Close, ArrowBack, Send } from "@mui/icons-material";
 import { io, Socket } from "socket.io-client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/src/lib/apiClient";
+import { queryKeys } from "@/src/lib/queryKeys";
 import AtomButton from "@/src/components/atoms/AtomButton";
 
 // ─────────────────────────────────────────────
@@ -88,8 +90,20 @@ interface ChatDrawerProps {
 // 컴포넌트
 // ─────────────────────────────────────────────
 export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatDrawerProps) {
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
-  const [isRoomsLoading, setIsRoomsLoading] = useState(false);
+  const queryClient = useQueryClient();
+
+  // ── 채팅방 목록 조회 (React Query)
+  const { data: roomsData, isLoading: isRoomsLoading } = useQuery({
+    queryKey: queryKeys.chat.rooms,
+    queryFn: async () => {
+      const data = await apiClient.getChatRooms();
+      const list: ChatRoom[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      return list;
+    },
+    enabled: open,
+  });
+  const rooms = roomsData ?? [];
 
   const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -97,18 +111,16 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const [inputText, setInputText] = useState("");
-  const [isSending, setIsSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const activeRoomRef = useRef<ChatRoom | null>(null);
 
-  // activeRoom이 바뀔 때 ref 동기화 (socket 핸들러 클로저에서 참조)
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
 
-  // ── WebSocket 연결 (컴포넌트 마운트 ~ 언마운트)
+  // ── WebSocket 연결
   useEffect(() => {
     const token = getToken();
     if (!token) return;
@@ -119,22 +131,18 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     });
     socketRef.current = socket;
 
-    // 실시간 메시지 수신
     socket.on("chat_message", (msg: ChatMessage) => {
       const current = activeRoomRef.current;
       if (current && msg.roomId === current.roomId) {
-        // 현재 열린 방이면 메시지 추가
         setMessages((prev) => {
-          // 중복 방지
           if (prev.some((m) => m.messageId === msg.messageId)) return prev;
           return [...prev, msg];
         });
-        // 현재 열린 방이면 서버에 읽음 처리 알림 (배지 동기화)
         apiClient.readRoom(msg.roomId).catch(() => {});
       } else {
-        // 다른 방 메시지 → unreadCount+1
-        setRooms((prev) =>
-          prev.map((r) =>
+        queryClient.setQueryData<ChatRoom[]>(queryKeys.chat.rooms, (old) => {
+          if (!old) return old;
+          return old.map((r) =>
             r.roomId === msg.roomId
               ? {
                   ...r,
@@ -143,13 +151,12 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
                   updatedAt: msg.sentAt,
                 }
               : r
-          )
-        );
+          );
+        });
       }
     });
 
     socket.on("connect", () => {
-      // 소켓 재연결 시 현재 열려 있는 방이 있다면 다시 join
       if (activeRoomRef.current) {
         socket.emit("join_room", { roomId: activeRoomRef.current.roomId });
       }
@@ -163,36 +170,13 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [queryClient]);
 
   // unreadCount 변경 시 부모에 알림
   useEffect(() => {
     const total = rooms.reduce((sum, r) => sum + r.unreadCount, 0);
     onUnreadCountChange?.(total);
   }, [rooms, onUnreadCountChange]);
-
-  // ── 채팅방 목록 조회
-  const fetchRooms = useCallback(async () => {
-    setIsRoomsLoading(true);
-    try {
-      const data = await apiClient.getChatRooms();
-      const list: ChatRoom[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      setRooms(list);
-    } catch (err) {
-      console.error("채팅방 목록 조회 실패:", err);
-    } finally {
-      setIsRoomsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) fetchRooms();
-  }, [open, fetchRooms]);
 
   // ── 메시지 조회
   const fetchMessages = useCallback(async (roomId: string, cursor?: string) => {
@@ -234,44 +218,49 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     setNextCursor(null);
     await fetchMessages(room.roomId);
 
-    // 실시간 메시지 수신을 위해 방 진입 알림
     socketRef.current?.emit("join_room", { roomId: room.roomId });
 
-    // 읽음 처리 → vadgeCount 0
     apiClient.readRoom(room.roomId).catch(() => {});
-    setRooms((prev) =>
-      prev.map((r) => (r.roomId === room.roomId ? { ...r, unreadCount: 0 } : r))
-    );
+    queryClient.setQueryData<ChatRoom[]>(queryKeys.chat.rooms, (old) => {
+      if (!old) return old;
+      return old.map((r) => (r.roomId === room.roomId ? { ...r, unreadCount: 0 } : r));
+    });
   };
 
   // ── 메시지 전송
-  const handleSend = async () => {
-    if (!inputText.trim() || !activeRoom || isSending) return;
-    const content = inputText.trim();
-    setInputText("");
-    setIsSending(true);
-    try {
-      const sent = await apiClient.sendChatMessage(activeRoom.roomId, content);
+  const sendMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!activeRoom) throw new Error("No active room");
+      return await apiClient.sendChatMessage(activeRoom.roomId, content);
+    },
+    onSuccess: (sent, content) => {
+      if (!activeRoom) return;
       const newMsg: ChatMessage = sent?.data ?? sent;
       setMessages((prev) => {
         if (prev.some((m) => m.messageId === newMsg.messageId)) return prev;
         return [...prev, newMsg];
       });
-      setRooms((prev) =>
-        prev.map((r) =>
+      queryClient.setQueryData<ChatRoom[]>(queryKeys.chat.rooms, (old) => {
+        if (!old) return old;
+        return old.map((r) =>
           r.roomId === activeRoom.roomId
             ? { ...r, lastMessage: { content, sentAt: newMsg?.sentAt ?? new Date().toISOString() }, updatedAt: new Date().toISOString() }
             : r
-        )
-      );
-    } catch (err) {
+        );
+      });
+    },
+    onError: (err, content) => {
       console.error("메시지 전송 실패:", err);
       setInputText(content);
-    } finally {
-      setIsSending(false);
     }
-  };
+  });
 
+  const handleSend = () => {
+    if (!inputText.trim() || !activeRoom || sendMutation.isPending) return;
+    const content = inputText.trim();
+    setInputText("");
+    sendMutation.mutate(content);
+  };
 
   const handleBack = () => {
     if (activeRoom) {
@@ -279,7 +268,7 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
     }
     setActiveRoom(null);
     setMessages([]);
-    fetchRooms();
+    queryClient.invalidateQueries({ queryKey: queryKeys.chat.rooms });
   };
 
   const activeRoomName = activeRoom ? getRoomDisplayName(activeRoom) : "";
@@ -586,11 +575,11 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
                       handleSend(); 
                     } 
                   }}
-                  disabled={isSending}
+                  disabled={sendMutation.isPending}
                 />
                 <IconButton
                   onClick={handleSend}
-                  disabled={!inputText.trim() || isSending}
+                  disabled={!inputText.trim() || sendMutation.isPending}
                   sx={{ 
                     bgcolor: inputText.trim() ? "#251B10" : "transparent",
                     color: inputText.trim() ? "white" : "#ccc",
@@ -603,7 +592,7 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
                     height: 36
                   }}
                 >
-                  {isSending ? <CircularProgress size={18} color="inherit" /> : <Send sx={{ fontSize: 18 }} />}
+                  {sendMutation.isPending ? <CircularProgress size={18} color="inherit" /> : <Send sx={{ fontSize: 18 }} />}
                 </IconButton>
               </Paper>
             </Box>

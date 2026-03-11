@@ -52,6 +52,36 @@ type AvailableInstructor = {
   name?: string;
 };
 
+type RecommendationMetrics = {
+  matchingSlotCount: number;
+  preferredRegionMatched: boolean;
+  acceptanceRate: number;
+  lateCount90d: number;
+  noShowEstimateCount90d: number;
+  completedLessonCount90d: number;
+};
+
+type Recommendation = {
+  instructorId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  residenceArea?: string;
+  majorField?: string;
+  certificates: string[];
+  score: number;
+  reasons: string[];
+  riskFlags: string[];
+  metrics: RecommendationMetrics;
+};
+
+type LessonReport = {
+  lessonReportId: string;
+  instructorId: string;
+  content: string;
+  submittedAt: string;
+};
+
 type AttendanceEvent = {
   attendanceEventId: string;
   lessonId: string;
@@ -108,6 +138,232 @@ const formatForInput = (utcString?: string) => {
   const offset = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 };
+
+// ─────────────────────────────────────────────
+// 추천 강사 패널 컴포넌트
+// ─────────────────────────────────────────────
+function RecommendationsPanel({
+  lessonId,
+  onAssign,
+  isCanceled,
+}: {
+  lessonId: string;
+  onAssign: () => void;
+  isCanceled: boolean;
+}) {
+  const [recs, setRecs] = useState<Recommendation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getRecommendations(lessonId);
+        const list: Recommendation[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        setRecs(list);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [lessonId]);
+
+  return (
+    <Paper sx={{ p: 4, borderRadius: 3 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Box>
+          <Typography variant="h6" fontWeight="bold">AI 추천 강사</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            수업 일정·지역·강사 이력을 종합해 추천된 강사 목록입니다.
+          </Typography>
+        </Box>
+        {!isCanceled && (
+          <Button variant="outlined" size="small" onClick={onAssign}>직접 배정하기</Button>
+        )}
+      </Stack>
+
+      {isLoading ? (
+        <Box display="flex" justifyContent="center" py={6}><CircularProgress size={32} /></Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
+      ) : recs.length === 0 ? (
+        <Box sx={{ textAlign: "center", py: 6, bgcolor: "#f8f9fa", borderRadius: 2 }}>
+          <Typography color="text.secondary">추천 가능한 강사가 없습니다.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            강사가 일정을 제출해야 추천 목록이 생성됩니다.
+          </Typography>
+        </Box>
+      ) : (
+        <Stack spacing={2}>
+          {recs.map((rec, idx) => (
+            <Paper
+              key={rec.instructorId}
+              elevation={0}
+              sx={{
+                p: 3, border: "1px solid #E8E8E8", borderRadius: 2,
+                borderLeft: `4px solid ${idx === 0 ? "#F3C742" : "#E0E0E0"}`,
+              }}
+            >
+              <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+                <Box sx={{ flex: 1 }}>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                    {idx === 0 && (
+                      <Chip label="추천 1순위" size="small" sx={{ bgcolor: "#FFF8E1", color: "#B7791F", fontWeight: 700, fontSize: "0.7rem" }} />
+                    )}
+                    <Typography fontWeight="bold">{rec.name}</Typography>
+                    {rec.majorField && (
+                      <Typography variant="caption" color="text.secondary">{rec.majorField}</Typography>
+                    )}
+                  </Stack>
+
+                  {/* 추천 이유 */}
+                  {rec.reasons.length > 0 && (
+                    <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mb: 1 }}>
+                      {rec.reasons.map((r) => (
+                        <Chip key={r} label={r} size="small" sx={{ bgcolor: "#E8F5E9", color: "#2E7D32", fontSize: "0.7rem" }} />
+                      ))}
+                    </Stack>
+                  )}
+
+                  {/* 리스크 플래그 */}
+                  {rec.riskFlags.length > 0 && (
+                    <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mb: 1 }}>
+                      {rec.riskFlags.map((r) => (
+                        <Chip key={r} label={r} size="small" sx={{ bgcolor: "#FFF3E0", color: "#E65100", fontSize: "0.7rem" }} />
+                      ))}
+                    </Stack>
+                  )}
+
+                  {/* metrics */}
+                  <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      수락률 {Math.round(rec.metrics.acceptanceRate * 100)}%
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      90일 완료 {rec.metrics.completedLessonCount90d}건
+                    </Typography>
+                    <Typography variant="caption" color={rec.metrics.lateCount90d > 0 ? "error" : "text.secondary"}>
+                      지각 {rec.metrics.lateCount90d}건
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      가용 슬롯 {rec.metrics.matchingSlotCount}개
+                    </Typography>
+                  </Stack>
+                </Box>
+
+                {/* 점수 뱃지 */}
+                <Box
+                  sx={{
+                    ml: 2, minWidth: 52, textAlign: "center",
+                    bgcolor: rec.score >= 70 ? "#E8F5E9" : "#FFF3E0",
+                    color: rec.score >= 70 ? "#2E7D32" : "#E65100",
+                    borderRadius: 2, px: 1.5, py: 0.75,
+                  }}
+                >
+                  <Typography variant="h6" fontWeight="bold" lineHeight={1}>{rec.score}</Typography>
+                  <Typography variant="caption">점</Typography>
+                </Box>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Paper>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 강의 보고서 패널 컴포넌트
+// ─────────────────────────────────────────────
+function LessonReportsPanel({ lessonId }: { lessonId: string }) {
+  const [reports, setReports] = useState<LessonReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getLessonReports(lessonId);
+        const list: LessonReport[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        setReports(list);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [lessonId]);
+
+  return (
+    <Paper sx={{ p: 4, borderRadius: 3 }}>
+      <Typography variant="h6" fontWeight="bold" sx={{ mb: 0.5 }}>강의 보고서</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        강사가 수업 완료 후 제출한 보고서입니다.
+      </Typography>
+
+      {isLoading ? (
+        <Box display="flex" justifyContent="center" py={6}><CircularProgress size={32} /></Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
+      ) : reports.length === 0 ? (
+        <Box sx={{ textAlign: "center", py: 6, bgcolor: "#f8f9fa", borderRadius: 2 }}>
+          <Typography color="text.secondary">제출된 강의 보고서가 없습니다.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            수업 완료 후 강사가 보고서를 제출하면 여기에 표시됩니다.
+          </Typography>
+        </Box>
+      ) : (
+        <Stack spacing={3}>
+          {reports.map((report) => (
+            <Paper
+              key={report.lessonReportId}
+              elevation={0}
+              sx={{ p: 3, border: "1px solid #E8E8E8", borderRadius: 2, bgcolor: "#FAFAFA" }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                <Chip
+                  label="보고서 제출 완료"
+                  size="small"
+                  sx={{ bgcolor: "#E8F5E9", color: "#2E7D32", fontWeight: 700, fontSize: "0.72rem" }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  제출일: {new Date(report.submittedAt).toLocaleString("ko-KR", {
+                    year: "numeric", month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </Typography>
+              </Stack>
+              <Box
+                sx={{
+                  p: 2, bgcolor: "#fff", borderRadius: 1.5,
+                  border: "1px solid #E0E0E0",
+                  whiteSpace: "pre-wrap", lineHeight: 1.8,
+                }}
+              >
+                <Typography variant="body2">{report.content}</Typography>
+              </Box>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Paper>
+  );
+}
 
 // ─────────────────────────────────────────────
 // 체크인 타임라인 컴포넌트
@@ -461,9 +717,13 @@ export default function ClassDetailPage() {
         value={tabIndex}
         onChange={(_, v) => setTabIndex(v)}
         sx={{ mb: 3, borderBottom: "1px solid #eee" }}
+        variant="scrollable"
+        scrollButtons="auto"
       >
         <Tab label="기본 정보" sx={{ fontWeight: "bold" }} />
         <Tab label="체크인 현황" sx={{ fontWeight: "bold" }} />
+        <Tab label="추천 강사" sx={{ fontWeight: "bold" }} />
+        <Tab label="강의 보고서" sx={{ fontWeight: "bold" }} />
       </Tabs>
 
       {/* ── 탭 0: 기본 정보 */}
@@ -577,6 +837,16 @@ export default function ClassDetailPage() {
           </Typography>
           <CheckinTimeline lessonId={lessonId} />
         </Paper>
+      )}
+
+      {/* ── 탭 2: 추천 강사 */}
+      {tabIndex === 2 && (
+        <RecommendationsPanel lessonId={lessonId} onAssign={handleOpenAssignModal} isCanceled={isCanceled} />
+      )}
+
+      {/* ── 탭 3: 강의 보고서 */}
+      {tabIndex === 3 && (
+        <LessonReportsPanel lessonId={lessonId} />
       )}
 
       {/* 강사 배정 모달 */}

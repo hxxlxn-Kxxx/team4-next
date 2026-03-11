@@ -206,4 +206,8 @@ export const apiClient = {
   // (선택) 추천 강사 조회 API
   getRecommendations: (lessonId: string) => 
     request<any>(`/lessons/${lessonId}/recommendations`),
+
+  // 강의 보고서 조회 - GET /lesson-reports?lessonId=
+  getLessonReports: (lessonId: string) =>
+    request<any>(`/lesson-reports?lessonId=${lessonId}`),
 };

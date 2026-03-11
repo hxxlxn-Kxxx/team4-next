@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Box,
@@ -48,6 +48,8 @@ import {
   getContractStatusColor,
   LESSON_SOURCE_TYPE_MAP,
 } from "@/src/types/backend";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
 
 // ─────────────────────────────────────────────
 // 타입
@@ -139,62 +141,43 @@ function ContractsContent() {
   const searchParams = useSearchParams();
   const lessonIdParam = searchParams.get("lessonId");
 
-  const [contracts, setContracts] = useState<ContractRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // 드로어 전용 상태
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drawerContract, setDrawerContract] = useState<ContractRow | null>(null);
-  const [isDrawerLoading, setIsDrawerLoading] = useState(false);
-
-  // 필터 상태
   const [filterName, setFilterName] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
   // ── 새 계약 생성 모달 상태
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createLessonId, setCreateLessonId] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-
-  // ── 드로어 액션 로딩 상태
-  const [isSending, setIsSending] = useState(false);
-  const [isReauthing, setIsReauthing] = useState(false);
-  const [isSigning, setIsSigning] = useState(false);
 
   // 재인증 토큰 및 동의 상태 (sign 직전 reauth 결과 보관)
   const [signToken, setSignToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
 
-  // ── 목록 API 조회
-  const fetchContracts = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterStatus) params.set("status", filterStatus);
-      if (filterName) params.set("instructorName", filterName);
-      if (lessonIdParam) params.set("lessonId", lessonIdParam);
-      const qs = params.toString();
+  // ── 목록 API 조회 (React Query)
+  const queryParams: Record<string, string> = {};
+  if (filterStatus) queryParams.status = filterStatus;
+  if (filterName) queryParams.instructorName = filterName;
+  if (lessonIdParam) queryParams.lessonId = lessonIdParam;
 
+  const { data: contractsData, isLoading, error } = useQuery({
+    queryKey: queryKeys.contracts.list({ ...queryParams }),
+    queryFn: async () => {
+      const qs = new URLSearchParams(queryParams).toString();
       const data = await apiClient.getContracts(qs);
-      const list: ContractRow[] = Array.isArray(data)
+      return Array.isArray(data)
         ? data
         : Array.isArray(data?.contracts)
         ? data.contracts
         : Array.isArray(data?.data)
         ? data.data
         : [];
-      setContracts(list);
-    } catch (err) {
-      console.error("계약 목록 조회 실패:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filterStatus, filterName]);
+    },
+  });
 
-  useEffect(() => {
-    fetchContracts();
-  }, [fetchContracts]);
+  const contracts: ContractRow[] = contractsData || [];
+
+  // 드로어 전용 상태
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // lessonIdParam이 있고 데이터 로드가 완료되면 해당 계약 상세를 자동으로 연다.
   useEffect(() => {
@@ -212,28 +195,24 @@ function ContractsContent() {
     }
   }, [lessonIdParam, contracts, selectedId]);
 
-  // ── 상세 API 조회 (드로어 열릴 때)
+  // ── 상세 API 조회 (React Query)
+  const { data: drawerContractData, isLoading: isDrawerLoading } = useQuery({
+    queryKey: queryKeys.contracts.detail(selectedId as string),
+    queryFn: async () => {
+      const data = await apiClient.getContractById(selectedId as string);
+      return data?.data ?? data;
+    },
+    enabled: !!selectedId,
+  });
+
+  const drawerContract: ContractRow | null = drawerContractData || null;
+
   useEffect(() => {
     if (!selectedId) {
-      setDrawerContract(null);
       setSignToken(null);
       setExpiresAt(null);
       setConsentGiven(false);
-      return;
     }
-    const fetchDetail = async () => {
-      setIsDrawerLoading(true);
-      try {
-        const data = await apiClient.getContractById(selectedId);
-        setDrawerContract(data?.data ?? data);
-      } catch (err) {
-        console.error("계약 상세 조회 실패:", err);
-        setDrawerContract(null);
-      } finally {
-        setIsDrawerLoading(false);
-      }
-    };
-    fetchDetail();
   }, [selectedId]);
 
   // ── 클라이언트 측 이름 필터
@@ -249,92 +228,107 @@ function ContractsContent() {
 
   const contractId = drawerContract?.contractId ?? drawerContract?.id ?? "";
 
-  // ── 새 계약 생성 핸들러
-  const handleCreateContract = async () => {
-    if (!createLessonId.trim()) return alert("수업 ID를 입력해주세요.");
-    setIsCreating(true);
-    try {
-      await apiClient.createContract({ lessonId: createLessonId.trim() });
+  const queryClient = useQueryClient();
+
+  // ── 새 계약 생성 핸들러 (useMutation)
+  const createMutation = useMutation({
+    mutationFn: async (lessonId: string) => {
+      await apiClient.createContract({ lessonId });
+    },
+    onSuccess: () => {
       alert("계약이 생성되었습니다. (DRAFT 상태)");
       setIsCreateOpen(false);
       setCreateLessonId("");
-      fetchContracts();
-    } catch (err: any) {
-      alert(err.message || "계약 생성에 실패했습니다.");
-    } finally {
-      setIsCreating(false);
-    }
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+    onError: (err) => {
+      alert(err instanceof Error ? err.message : "계약 생성에 실패했습니다.");
+    },
+  });
+
+  const handleCreateContract = () => {
+    if (!createLessonId.trim()) return alert("수업 ID를 입력해주세요.");
+    createMutation.mutate(createLessonId.trim());
   };
 
-  // ── 발송 핸들러
-  const handleSend = async () => {
+  // ── 발송 핸들러 (useMutation)
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      if (!contractId) throw new Error("계약 ID가 없습니다.");
+      return apiClient.sendContract(contractId);
+    },
+    onSuccess: () => {
+      alert("계약서가 발송되었습니다.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(selectedId as string) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+    onError: (err) => {
+      alert(err instanceof Error ? err.message : "발송에 실패했습니다.");
+    },
+  });
+
+  const handleSend = () => {
     if (!contractId) return;
     if (!window.confirm("강사에게 계약서를 발송하시겠습니까?")) return;
-    setIsSending(true);
-    try {
-      const updated = await apiClient.sendContract(contractId);
-      alert("계약서가 발송되었습니다.");
-      setDrawerContract((prev) => (prev ? { ...prev, ...(updated?.data ?? updated) } : prev));
-      fetchContracts();
-    } catch (err: any) {
-      alert(err.message || "발송에 실패했습니다.");
-    } finally {
-      setIsSending(false);
-    }
+    sendMutation.mutate();
   };
 
   // ── 재인증 후 관리자 서명 핸들러
-  const handleReauthAndSign = async () => {
+  const reauthMutation = useMutation({
+    mutationFn: async () => {
+      if (!contractId) throw new Error("계약 ID가 없습니다.");
+      return apiClient.reauthContract(contractId);
+    },
+    onSuccess: (res) => {
+      const token = res?.signToken || res?.reauthToken || res?.token || (typeof res === "string" ? res : null);
+      if (!token) throw new Error("재인증 토큰을 받지 못했습니다.");
+      setSignToken(token);
+      setExpiresAt(res?.expiresAt || null);
+      alert("재인증 완료. 내용을 확인하고 아래 동의 체크 후 '최종 서명하기'를 눌러주세요.");
+    },
+    onError: (err) => {
+      alert(err instanceof Error ? err.message : "재인증에 실패했습니다.");
+    },
+  });
+
+  const signMutation = useMutation({
+    mutationFn: async ({ token }: { token: string }) => {
+      if (!contractId) throw new Error("계약 ID가 없습니다.");
+      return apiClient.signContract(contractId, {
+        signToken: token,
+        consentGiven: true,
+        consentTextVersion: "v1.0",
+      });
+    },
+    onSuccess: () => {
+      alert("관리자 서명이 완료되었습니다!");
+      setSignToken(null);
+      setExpiresAt(null);
+      setConsentGiven(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(selectedId as string) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+    onError: (err) => {
+      alert(err instanceof Error ? err.message : "서명에 실패했습니다.");
+    },
+  });
+
+  const handleReauthAndSign = () => {
     if (!contractId) return;
     
     // Step 1: 재인증 토큰 발급 (signToken)
     if (!signToken) {
-      setIsReauthing(true);
-      try {
-        const res = await apiClient.reauthContract(contractId);
-        // 백엔드 응답 필드명 확인 (signToken 또는 reauthToken)
-        const token = res?.signToken || res?.reauthToken || res?.token || (typeof res === "string" ? res : null);
-        
-        if (!token) {
-          throw new Error("재인증 토큰을 받지 못했습니다.");
-        }
-        
-        setSignToken(token);
-        setExpiresAt(res?.expiresAt || null);
-        alert("재인증 완료. 내용을 확인하고 아래 동의 체크 후 '최종 서명하기'를 눌러주세요.");
-      } catch (err: any) {
-        alert(err.message || "재인증에 실패했습니다.");
-      } finally {
-        setIsReauthing(false);
-      }
+      reauthMutation.mutate();
       return;
     }
 
     // Step 2: 서명 동의 여부 체크
     if (!consentGiven) {
-      alert("서명 동의에 체크해주세요.");
-      return;
+      return alert("서명 동의에 체크해주세요.");
     }
 
     // Step 3: 최종 서명 시연
-    setIsSigning(true);
-    try {
-      const updated = await apiClient.signContract(contractId, { 
-        signToken,
-        consentGiven: true,
-        consentTextVersion: "v1.0" // 고정 버전 또는 서버 수신값 사용 가능
-      });
-      alert("관리자 서명이 완료되었습니다!");
-      setDrawerContract((prev) => (prev ? { ...prev, ...(updated?.data ?? updated) } : prev));
-      setSignToken(null);
-      setExpiresAt(null);
-      setConsentGiven(false);
-      fetchContracts();
-    } catch (err: any) {
-      alert(err.message || "서명에 실패했습니다.");
-    } finally {
-      setIsSigning(false);
-    }
+    signMutation.mutate({ token: signToken });
   };
 
   return (
@@ -366,9 +360,9 @@ function ContractsContent() {
           />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <AtomButton atomVariant="ghost" onClick={() => setIsCreateOpen(false)} disabled={isCreating}>취소</AtomButton>
-          <AtomButton onClick={handleCreateContract} disabled={isCreating || !createLessonId.trim()}>
-            {isCreating ? "생성 중..." : "생성하기"}
+          <AtomButton atomVariant="ghost" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>취소</AtomButton>
+          <AtomButton onClick={handleCreateContract} disabled={createMutation.isPending || !createLessonId.trim()}>
+            {createMutation.isPending ? "생성 중..." : "생성하기"}
           </AtomButton>
         </DialogActions>
       </Dialog>
@@ -397,9 +391,6 @@ function ContractsContent() {
             </MenuItem>
           ))}
         </AtomInput>
-        <AtomButton startIcon={<Search />} onClick={fetchContracts}>
-          검색
-        </AtomButton>
       </FilterBar>
 
       {/* ── 목록 테이블 */}
@@ -616,9 +607,9 @@ function ContractsContent() {
                     startIcon={<Send />}
                     sx={{ width: "100%", mb: 1.25 }}
                     onClick={handleSend}
-                    disabled={isSending}
+                    disabled={sendMutation.isPending}
                   >
-                    {isSending ? "발송 중..." : "계약서 발송하기"}
+                    {sendMutation.isPending ? "발송 중..." : "계약서 발송하기"}
                   </AtomButton>
                 )}
 
@@ -629,9 +620,9 @@ function ContractsContent() {
                     startIcon={<Send />}
                     sx={{ width: "100%", mb: 1.25 }}
                     onClick={handleSend}
-                    disabled={isSending}
+                    disabled={sendMutation.isPending}
                   >
-                    {isSending ? "재발송 중..." : "재발송 (서명 요청)"}
+                    {sendMutation.isPending ? "재발송 중..." : "재발송 (서명 요청)"}
                   </AtomButton>
                 )}
 
@@ -663,11 +654,11 @@ function ContractsContent() {
                     <AtomButton
                       sx={{ width: "100%", mb: 1.25 }}
                       onClick={handleReauthAndSign}
-                      disabled={isReauthing || isSigning || (signToken !== null && !consentGiven)}
+                      disabled={reauthMutation.isPending || signMutation.isPending || (signToken !== null && !consentGiven)}
                     >
-                      {isReauthing
+                      {reauthMutation.isPending
                         ? "재인증 중..."
-                        : isSigning
+                        : signMutation.isPending
                         ? "서명 처리 중..."
                         : signToken
                         ? "관리자 최종 서명하기"

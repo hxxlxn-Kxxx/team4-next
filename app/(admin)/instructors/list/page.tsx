@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
@@ -38,6 +38,8 @@ import FilterBar from "@/src/components/admin/FilterBar";
 import PageHeader from "@/src/components/admin/PageHeader";
 import SurfaceCard from "@/src/components/admin/SurfaceCard";
 import { apiClient } from "@/src/lib/apiClient";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
 
 // ─────────────────────────────────────────────
 // 타입 (백엔드 DTO 기반)
@@ -140,14 +142,6 @@ export default function InstructorListPage() {
   // 탭 (0: 운영 리스트, 1: 주간 매트릭스)
   const [currentTab, setCurrentTab] = useState(0);
 
-  // 데이터 상태
-  const [operationsData, setOperationsData] = useState<OperationInstructor[]>([]);
-  const [weeklyData, setWeeklyData] = useState<WeeklyInstructor[]>([]);
-  const [isOpLoading, setIsOpLoading] = useState(false);
-  const [isWkLoading, setIsWkLoading] = useState(false);
-  const [opError, setOpError] = useState<string | null>(null);
-  const [wkError, setWkError] = useState<string | null>(null);
-
   // 필터
   const [filterName, setFilterName] = useState("");
   const [filterStatus, setFilterStatus] = useState("전체");
@@ -155,49 +149,46 @@ export default function InstructorListPage() {
   // 드로어
   const [selectedInstructor, setSelectedInstructor] = useState<OperationInstructor | null>(null);
 
-  // ── 운영 리스트 fetch
-  const fetchOperations = useCallback(async () => {
-    setIsOpLoading(true);
-    setOpError(null);
-    try {
-      const monthStr = toYearMonth(currentMonth);
+  // ── 데이터 로드 (React Query)
+  const monthStr = toYearMonth(currentMonth);
+  const { 
+    data: operationsDataRaw, 
+    isLoading: isOpLoading, 
+    error: opQueryError 
+  } = useQuery({
+    queryKey: queryKeys.instructors.operations(monthStr),
+    queryFn: async () => {
       const res = await apiClient.getInstructorOperations(monthStr);
-      // 응답: { data: InstructorOperationsItemDto[] } 또는 배열
       const list: OperationInstructor[] = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
         ? res.data
         : [];
-      setOperationsData(list);
-    } catch (err: any) {
-      setOpError(err.message || "운영 리스트를 불러오지 못했습니다.");
-    } finally {
-      setIsOpLoading(false);
+      return list;
     }
-  }, [currentMonth]);
+  });
+  const operationsData = operationsDataRaw || [];
+  const opError = opQueryError ? opQueryError.message || "운영 리스트를 불러오지 못했습니다." : null;
 
-  // ── 주간 가용성 fetch
-  const fetchWeekly = useCallback(async () => {
-    setIsWkLoading(true);
-    setWkError(null);
-    try {
-      const startDate = toISODate(weekStart);
+  const startDate = toISODate(weekStart);
+  const {
+    data: weeklyDataRaw,
+    isLoading: isWkLoading,
+    error: wkQueryError
+  } = useQuery({
+    queryKey: queryKeys.instructors.weekly(startDate),
+    queryFn: async () => {
       const res = await apiClient.getInstructorWeeklyAvailability(startDate);
       const list: WeeklyInstructor[] = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
         ? res.data
         : [];
-      setWeeklyData(list);
-    } catch (err: any) {
-      setWkError(err.message || "주간 가용성 데이터를 불러오지 못했습니다.");
-    } finally {
-      setIsWkLoading(false);
+      return list;
     }
-  }, [weekStart]);
-
-  useEffect(() => { fetchOperations(); }, [fetchOperations]);
-  useEffect(() => { fetchWeekly(); }, [fetchWeekly]);
+  });
+  const weeklyData = weeklyDataRaw || [];
+  const wkError = wkQueryError ? wkQueryError.message || "주간 가용성 데이터를 불러오지 못했습니다." : null;
 
   // ── 월 이동 (Tab 0)
   const goMonth = (delta: number) => {
@@ -303,7 +294,7 @@ export default function InstructorListPage() {
               <MenuItem key={opt} value={opt}>{opt}</MenuItem>
             ))}
           </AtomInput>
-          <AtomButton startIcon={<Search />} onClick={fetchOperations} sx={{ minWidth: { xs: "100%", lg: 132 } }}>
+          <AtomButton startIcon={<Search />} sx={{ minWidth: { xs: "100%", lg: 132 } }}>
             검색
           </AtomButton>
         </FilterBar>

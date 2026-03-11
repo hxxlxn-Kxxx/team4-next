@@ -68,6 +68,9 @@ function isToday(isoStr: string): boolean {
   );
 }
 
+import { useQuery, useQueries } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
+
 // ─────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────
@@ -77,130 +80,106 @@ export default function DashboardPage() {
   const [calendarTitle, setCalendarTitle] = useState("2026년 3월");
   const calendarRef = useRef<FullCalendar | null>(null);
 
-  // 데이터 상태
-  const [lessons, setLessons] = useState<LessonRow[]>([]);
-  const [contracts, setContracts] = useState<ContractRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // ── 데이터 로드 (React Query)
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: queryKeys.lessons.list({}),
+        queryFn: async () => {
+          const data = await apiClient.getLessons("");
+          return Array.isArray(data)
+            ? data
+            : Array.isArray(data?.data)
+            ? data.data
+            : [];
+        },
+      },
+      {
+        queryKey: queryKeys.contracts.list({}),
+        queryFn: async () => {
+          const data = await apiClient.getContracts("");
+          return Array.isArray(data)
+            ? data
+            : Array.isArray(data?.contracts)
+            ? data.contracts
+            : Array.isArray(data?.data)
+            ? data.data
+            : [];
+        },
+      },
+    ],
+  });
+
+  const [{ data: lessons = [], isLoading: isLessonsLoading }, { data: contracts = [], isLoading: isContractsLoading }] = results;
+  const isLoading = isLessonsLoading || isContractsLoading;
+
 
   // 추천 현황 상태
-  const [recStats, setRecStats] = useState({
-    hasRecsCount: 0,
-    topRecReadyCount: 0,
-    firstLessonIdWithRec: null as string | null,
-  });
-  const [isRecLoading, setIsRecLoading] = useState(false);
-
-  // 선택된 이벤트 툴팁
   const [selectedEvent, setSelectedEvent] = useState<{ title: string; location: string; status: LessonStatus } | null>(null);
-
-  // ── 데이터 로드
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const [lessonData, contractData] = await Promise.all([
-          apiClient.getLessons(""),
-          apiClient.getContracts(""),
-        ]);
-
-        const lessonList: LessonRow[] = Array.isArray(lessonData)
-          ? lessonData
-          : Array.isArray(lessonData?.data)
-          ? lessonData.data
-          : [];
-
-        const contractList: ContractRow[] = Array.isArray(contractData)
-          ? contractData
-          : Array.isArray(contractData?.contracts)
-          ? contractData.contracts
-          : Array.isArray(contractData?.data)
-          ? contractData.data
-          : [];
-
-        setLessons(lessonList);
-        setContracts(contractList);
-      } catch (err) {
-        console.error("대시보드 데이터 로드 실패:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadData();
-  }, []);
 
   // 미배정 수업
   const unassignedLessons = lessons.filter(
-    (l) => l.status === "PENDING" || l.status === "ACCEPTED"
+    (l: LessonRow) => l.status === "PENDING" || l.status === "ACCEPTED"
   );
 
-  // ── 추천 데이터 독립 로드 (미배정 수업 기준)
-  useEffect(() => {
-    if (unassignedLessons.length === 0) {
-      setRecStats({ hasRecsCount: 0, topRecReadyCount: 0, firstLessonIdWithRec: null });
-      return;
-    }
-
-    const loadRecs = async () => {
-      setIsRecLoading(true);
-      try {
-        let hasRecsCount = 0;
-        let topRecReadyCount = 0;
-        let firstLessonIdWithRec: string | null = null;
-
-        // 미배정 수업(최대 10개 등 너무 많지 않다고 가정, MVP 수준)
-        const promises = unassignedLessons.map(async (lesson) => {
-          try {
-            const data = await apiClient.getRecommendations(lesson.lessonId);
-            const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-            if (list.length > 0) {
-              if (!firstLessonIdWithRec) firstLessonIdWithRec = lesson.lessonId;
-              hasRecsCount++;
-              // 최고 추천 강사(1순위) 점수가 70 이상이거나 confidenceLabel 이 있는 경우 '준비됨'으로 카운트
-              if (list[0].score >= 70 || list[0].confidenceLabel) {
-                topRecReadyCount++;
-              }
-            }
-          } catch (e) {
-            // 무시 (오류난 수업은 추천 없는 것으로 간주)
-          }
-        });
-
-        await Promise.all(promises);
-
-        setRecStats({
-          hasRecsCount,
-          topRecReadyCount,
-          firstLessonIdWithRec,
-        });
-      } catch (err) {
-        console.error("추천 데이터 로드 실패:", err);
-      } finally {
-        setIsRecLoading(false);
+  // ── 추천 데이터 독립 로드 (미배정 수업 기준) - React Query
+  const { data: recStatsData, isLoading: isRecLoading } = useQuery({
+    queryKey: [...queryKeys.dashboard.summary(), unassignedLessons.map((l: LessonRow) => l.lessonId).sort().join(",")],
+    queryFn: async () => {
+      if (unassignedLessons.length === 0) {
+        return { hasRecsCount: 0, topRecReadyCount: 0, firstLessonIdWithRec: null };
       }
-    };
-    
-    // 로딩이 완료되고 unassignedLessons가 세팅된 직후 한번만 실행되도록
-    // (간단 구현 위해 unassignedLessons.length를 의존성으로 하되 단순화)
-    loadRecs();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unassignedLessons.length]);
+
+      let hasRecsCount = 0;
+      let topRecReadyCount = 0;
+      let firstLessonIdWithRec: string | null = null;
+
+      const promises = unassignedLessons.map(async (lesson: LessonRow) => {
+        try {
+          const data = await apiClient.getRecommendations(lesson.lessonId);
+          const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+          if (list.length > 0) {
+            if (!firstLessonIdWithRec) firstLessonIdWithRec = lesson.lessonId;
+            hasRecsCount++;
+            if (list[0].score >= 70 || list[0].confidenceLabel) {
+              topRecReadyCount++;
+            }
+          }
+        } catch (e) {
+          // 무시
+        }
+      });
+
+      await Promise.all(promises);
+
+      return { hasRecsCount, topRecReadyCount, firstLessonIdWithRec };
+    },
+    enabled: unassignedLessons.length > 0,
+  });
+
+  const recStats = recStatsData || {
+    hasRecsCount: 0,
+    topRecReadyCount: 0,
+    firstLessonIdWithRec: null as string | null,
+  };
+
 
   // ── 통계 계산 (프론트 계산)
   const todayLessons = lessons.filter(
-    (l) => l.status !== "CANCELLED" && isToday(l.startsAt)
+    (l: LessonRow) => l.status !== "CANCELLED" && isToday(l.startsAt)
   );
   // 미서명 계약 = DRAFT | SENT | INSTRUCTOR_SIGNED
   const unsignedContracts = contracts.filter(
-    (c) => c.status === "DRAFT" || c.status === "SENT" || c.status === "INSTRUCTOR_SIGNED"
+    (c: ContractRow) => c.status === "DRAFT" || c.status === "SENT" || c.status === "INSTRUCTOR_SIGNED"
   );
   const activeLessons = lessons.filter(
-    (l) => l.status !== "CANCELLED" && l.status !== "COMPLETED"
+    (l: LessonRow) => l.status !== "CANCELLED" && l.status !== "COMPLETED"
   );
 
   // ── FullCalendar 이벤트 변환
   const calendarEvents = lessons
-    .filter((l) => l.status !== "CANCELLED")
-    .map((l) => ({
+    .filter((l: LessonRow) => l.status !== "CANCELLED")
+    .map((l: LessonRow) => ({
       id: l.lessonId,
       title: l.lectureTitle || "수업",
       start: l.startsAt,
@@ -215,7 +194,7 @@ export default function DashboardPage() {
 
   // ── 오늘 수업 Live 섹션
   const todayEvents = lessons
-    .filter((l) => l.status !== "CANCELLED" && isToday(l.startsAt))
+    .filter((l: LessonRow) => l.status !== "CANCELLED" && isToday(l.startsAt))
     .slice(0, 5); // 최대 5건만 표시
 
   const handleDatesSet = (dateInfo: DatesSetArg) => {
@@ -413,7 +392,7 @@ export default function DashboardPage() {
                 </Typography>
               ) : (
                 <Stack spacing={1.5}>
-                  {todayEvents.map((lesson) => {
+                  {todayEvents.map((lesson: LessonRow) => {
                     const location = lesson.museum || lesson.venueName || lesson.region || "-";
                     const startTime = new Date(lesson.startsAt).toLocaleTimeString("ko-KR", {
                       hour: "2-digit", minute: "2-digit", hour12: false,
@@ -451,8 +430,8 @@ export default function DashboardPage() {
                             size="small"
                             sx={{
                               fontSize: "0.65rem", height: 18,
-                              bgcolor: STATUS_COLOR_MAP[lesson.status] + "22",
-                              color: STATUS_COLOR_MAP[lesson.status],
+                              bgcolor: (STATUS_COLOR_MAP[lesson.status] || "#9E9E9E") + "22",
+                              color: STATUS_COLOR_MAP[lesson.status] || "#9E9E9E",
                               fontWeight: 700,
                             }}
                           />

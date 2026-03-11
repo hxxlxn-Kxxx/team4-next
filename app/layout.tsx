@@ -7,6 +7,7 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import theme from "../src/theme";
+import Providers from "@/src/components/Providers";
 
 export const metadata: Metadata = {
   title: "free-b Admin",
@@ -21,13 +22,14 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body>
-        {/* AppRouterCacheProvider가 스타일 깨짐을 방지합니다 */}
         <AppRouterCacheProvider>
-          <ThemeProvider theme={theme}>
-            {/* CssBaseline은 브라우저 기본 스타일을 초기화합니다 */}
-            <CssBaseline />
-            {children}
-          </ThemeProvider>
+          <Providers>
+            <ThemeProvider theme={theme}>
+              {/* CssBaseline은 브라우저 기본 스타일을 초기화합니다 */}
+              <CssBaseline />
+              {children}
+            </ThemeProvider>
+          </Providers>
         </AppRouterCacheProvider>
       </body>
     </html>

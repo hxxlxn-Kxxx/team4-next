@@ -19,6 +19,8 @@ import {
   CONTRACT_STATUS_MAP, type ContractStatus, getContractStatusColor,
 } from "@/src/types/backend";
 import { apiClient } from "@/src/lib/apiClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/src/lib/queryKeys";
 
 // ─────────────────────────────────────────────
 // 타입
@@ -158,37 +160,27 @@ function RecommendationsPanel({
   onAssign: () => void;
   isCanceled: boolean;
 }) {
-  const [recs, setRecs] = useState<Recommendation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expandedRecs, setExpandedRecs] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
     setExpandedRecs((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const loadRecs = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const { data: recsData, isLoading, error: queryError, refetch } = useQuery({
+    queryKey: ["recommendations", lessonId],
+    queryFn: async () => {
       const data = await apiClient.getRecommendations(lessonId);
-      const list: Recommendation[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      setRecs(list);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+    },
+    enabled: !!lessonId,
+  });
 
-  useEffect(() => {
-    loadRecs();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lessonId]);
+  const recs: Recommendation[] = recsData || [];
+  const error = queryError instanceof Error ? queryError.message : null;
+
+  const loadRecs = () => refetch();
+
+
 
   return (
     <Paper sx={{ p: 4, borderRadius: 3 }}>
@@ -428,30 +420,17 @@ function RecommendationsPanel({
 // 강의 보고서 패널 컴포넌트
 // ─────────────────────────────────────────────
 function LessonReportsPanel({ lessonId }: { lessonId: string }) {
-  const [reports, setReports] = useState<LessonReport[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: reportsData, isLoading, error: queryError } = useQuery({
+    queryKey: ["lessonReports", lessonId],
+    queryFn: async () => {
+      const data = await apiClient.getLessonReports(lessonId);
+      return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+    },
+    enabled: !!lessonId,
+  });
 
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await apiClient.getLessonReports(lessonId);
-        const list: LessonReport[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data)
-          ? data.data
-          : [];
-        setReports(list);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [lessonId]);
+  const reports: LessonReport[] = reportsData || [];
+  const error = queryError instanceof Error ? queryError.message : null;
 
   return (
     <Paper sx={{ p: 4, borderRadius: 3 }}>
@@ -513,32 +492,22 @@ function LessonReportsPanel({ lessonId }: { lessonId: string }) {
 // 체크인 타임라인 컴포넌트
 // ─────────────────────────────────────────────
 function CheckinTimeline({ lessonId }: { lessonId: string }) {
-  const [events, setEvents] = useState<AttendanceEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: eventsData, isLoading, error: queryError } = useQuery({
+    queryKey: ["attendanceEvents", lessonId],
+    queryFn: async () => {
+      const data = await apiClient.getAttendanceEvents({ lessonId });
+      const list: AttendanceEvent[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+      return list.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+    },
+    enabled: !!lessonId,
+  });
 
-  useEffect(() => {
-    const fetch = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await apiClient.getAttendanceEvents({ lessonId });
-        const list: AttendanceEvent[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data)
-          ? data.data
-          : [];
-        // occurredAt 오름차순 정렬
-        list.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
-        setEvents(list);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetch();
-  }, [lessonId]);
+  const events: AttendanceEvent[] = eventsData || [];
+  const error = queryError instanceof Error ? queryError.message : null;
 
   if (isLoading) {
     return (
@@ -659,15 +628,7 @@ export default function ClassDetailPage() {
   const { id } = useParams();
   const router = useRouter();
 
-  const [lesson, setLesson] = useState<LessonDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [tabIndex, setTabIndex] = useState(0);
-
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [availableInstructors, setAvailableInstructors] = useState<AvailableInstructor[]>([]);
-  const [isFetchingInstructors, setIsFetchingInstructors] = useState(false);
   const [selectedInstructorId, setSelectedInstructorId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
 
@@ -681,93 +642,99 @@ export default function ClassDetailPage() {
     guideNotionUrl: "", lessonDetails: "", deliveryNotes: "",
   });
 
-  const [associatedContract, setAssociatedContract] = useState<any | null>(null);
-  const [isFetchingContract, setIsFetchingContract] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0);
 
-  const fetchAssociatedContract = useCallback(async () => {
-    if (!id) return;
-    setIsFetchingContract(true);
-    try {
-      // lessonId로 계약 필터링 조회 (서버 사양에 따라 다를 수 있으나 lessonId 쿼리 활용)
-      const data = await apiClient.getContracts(`lessonId=${id}`);
-      const contracts = Array.isArray(data) ? data : data.data || [];
-      if (contracts.length > 0) {
-        setAssociatedContract(contracts[0]);
-      } else {
-        setAssociatedContract(null);
-      }
-    } catch (err) {
-      console.error("Failed to fetch associated contract:", err);
-    } finally {
-      setIsFetchingContract(false);
-    }
-  }, [id]);
+  // ── 데이터 로드 (React Query)
+  const lessonIdStr = id as string;
 
-  const fetchLessonDetail = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await apiClient.getLessonDetail(id as string);
-      setLesson(data.data || data);
-    } catch (err: unknown) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
+  const { data: lessonData, isLoading: isLoadingLesson, error: lessonError } = useQuery({
+    queryKey: queryKeys.lessons.detail(lessonIdStr),
+    queryFn: async () => {
+      const data = await apiClient.getLessonDetail(lessonIdStr);
+      return data.data || data;
+    },
+    enabled: !!id,
+  });
 
-  useEffect(() => {
-    if (id) {
-      fetchLessonDetail();
-      fetchAssociatedContract();
-    }
-  }, [id, fetchLessonDetail, fetchAssociatedContract]);
+  const { data: contractData, isLoading: isFetchingContract } = useQuery({
+    queryKey: [...queryKeys.contracts.list({ lessonId: lessonIdStr })],
+    queryFn: async () => {
+      const data = await apiClient.getContracts(`lessonId=${lessonIdStr}`);
+      return Array.isArray(data) ? data : data.data || [];
+    },
+    enabled: !!id,
+  });
 
-  const handleOpenAssignModal = async () => {
+  const lesson = lessonData || null;
+  const isLoading = isLoadingLesson;
+  const error = lessonError instanceof Error ? lessonError.message : null;
+  const associatedContract = contractData && contractData.length > 0 ? contractData[0] : null;
+
+  // 가용 강사 조회 (React Query)
+  const isDateValidForInstructors = Boolean(lesson?.startsAt) && Boolean(lesson?.endsAt);
+  const { data: availableInstructorsData, isLoading: isFetchingInstructors } = useQuery({
+    queryKey: ["instructors", "available", lesson?.startsAt, lesson?.endsAt],
+    queryFn: async () => {
+      const data = await apiClient.getAvailableInstructors(
+        new Date(lesson!.startsAt!).toISOString(),
+        new Date(lesson!.endsAt!).toISOString()
+      );
+      return Array.isArray(data) ? data : data.data || [];
+    },
+    enabled: isAssignModalOpen && isDateValidForInstructors,
+    placeholderData: [],
+  });
+  
+  const availableInstructors = availableInstructorsData || [];
+
+  const queryClient = useQueryClient();
+
+  const handleOpenAssignModal = () => {
     if (!lesson?.startsAt || !lesson?.endsAt) return alert("수업 시간이 없어 강사 목록을 조회할 수 없습니다.");
     setIsAssignModalOpen(true);
-    setIsFetchingInstructors(true);
-    try {
-      const data = await apiClient.getAvailableInstructors(
-        new Date(lesson.startsAt).toISOString(),
-        new Date(lesson.endsAt).toISOString()
-      );
-      setAvailableInstructors(Array.isArray(data) ? data : data.data || []);
-    } catch (err: unknown) {
-      alert(getErrorMessage(err));
-    } finally {
-      setIsFetchingInstructors(false);
-    }
   };
 
-  const handleAssignInstructor = async () => {
-    if (!selectedInstructorId) return;
-    setIsAssigning(true);
-    try {
-      await apiClient.assignInstructor(id as string, selectedInstructorId);
+  const assignMutation = useMutation({
+    mutationFn: async (instructorId: string) => {
+      await apiClient.assignInstructor(lessonIdStr, instructorId);
+    },
+    onSuccess: () => {
       alert("강사에게 배정 요청을 성공적으로 보냈습니다!");
       setIsAssignModalOpen(false);
       setSelectedInstructorId("");
-      fetchLessonDetail();
-      fetchAssociatedContract(); // 수락 후 자동 생성된 계약이 있을 수 있으므로 연동 조회
-    } catch (err: unknown) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.detail(lessonIdStr) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.list({ lessonId: lessonIdStr }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+    onError: (err) => {
       alert(`배정 요청 실패: ${getErrorMessage(err)}`);
-    } finally {
-      setIsAssigning(false);
-    }
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.cancelLesson(lessonIdStr);
+    },
+    onSuccess: () => {
+      alert("수업이 취소되었습니다.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.detail(lessonIdStr) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+    },
+    onError: (err) => {
+      alert(`취소 실패: ${getErrorMessage(err)}`);
+    },
+  });
+
+  const handleAssignInstructor = () => {
+    if (!selectedInstructorId) return;
+    assignMutation.mutate(selectedInstructorId);
   };
 
-  const handleCancelLesson = async () => {
+  const handleCancelLesson = () => {
     if (!window.confirm("정말 이 수업을 취소하시겠습니까?")) return;
-    setIsCanceling(true);
-    try {
-      await apiClient.cancelLesson(id as string);
-      alert("수업이 취소되었습니다.");
-      fetchLessonDetail();
-    } catch (err: unknown) {
-      alert(`취소 실패: ${getErrorMessage(err)}`);
-    } finally {
-      setIsCanceling(false);
-    }
+    cancelMutation.mutate();
   };
 
   const handleOpenEdit = () => {
@@ -796,28 +763,34 @@ export default function ClassDetailPage() {
     setEditFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleUpdateLesson = async () => {
+  const updateMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      await apiClient.updateLesson(lessonIdStr, payload);
+    },
+    onSuccess: () => {
+      alert("정보가 수정되었습니다.");
+      setIsEditing(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.detail(lessonIdStr) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+    },
+    onError: (err) => {
+      alert(`수정 실패: ${getErrorMessage(err)}`);
+    },
+  });
+
+  const handleUpdateLesson = () => {
     if (new Date(editFormData.startsAt) >= new Date(editFormData.endsAt)) {
       return alert("종료 시간이 시작 시간보다 빠를 수 없습니다.");
     }
-    setIsUpdating(true);
-    try {
-      const payload = {
-        ...editFormData,
-        payAmount: Number(editFormData.payAmount),
-        studentCount: Number(editFormData.studentCount),
-        startsAt: new Date(editFormData.startsAt).toISOString(),
-        endsAt: new Date(editFormData.endsAt).toISOString(),
-      };
-      await apiClient.updateLesson(id as string, payload);
-      alert("정보가 수정되었습니다.");
-      setIsEditing(false);
-      fetchLessonDetail();
-    } catch (err: unknown) {
-      alert(`수정 실패: ${getErrorMessage(err)}`);
-    } finally {
-      setIsUpdating(false);
-    }
+    const payload = {
+      ...editFormData,
+      payAmount: Number(editFormData.payAmount),
+      studentCount: Number(editFormData.studentCount),
+      startsAt: new Date(editFormData.startsAt).toISOString(),
+      endsAt: new Date(editFormData.endsAt).toISOString(),
+    };
+    updateMutation.mutate(payload);
   };
 
   if (isLoading) {
@@ -853,13 +826,13 @@ export default function ClassDetailPage() {
           <Stack direction="row" spacing={1} sx={{ mr: 2 }}>
             {isEditing ? (
               <>
-                <Button variant="outlined" color="inherit" onClick={handleCancelEdit} disabled={isUpdating}>취소</Button>
-                <Button variant="contained" color="primary" onClick={handleUpdateLesson} disabled={isUpdating}>{isUpdating ? "저장 중..." : "저장 완료"}</Button>
+                <Button variant="outlined" color="inherit" onClick={handleCancelEdit} disabled={updateMutation.isPending}>취소</Button>
+                <Button variant="contained" color="primary" onClick={handleUpdateLesson} disabled={updateMutation.isPending}>{updateMutation.isPending ? "저장 중..." : "저장 완료"}</Button>
               </>
             ) : (
               <>
                 <Button variant="outlined" color="primary" startIcon={<Edit />} onClick={handleOpenEdit}>수정</Button>
-                <Button variant="outlined" color="error" startIcon={<Block />} onClick={handleCancelLesson} disabled={isCanceling}>{isCanceling ? "취소 중..." : "수업 취소"}</Button>
+                <Button variant="outlined" color="error" startIcon={<Block />} onClick={handleCancelLesson} disabled={cancelMutation.isPending}>{cancelMutation.isPending ? "취소 중..." : "수업 취소"}</Button>
               </>
             )}
           </Stack>
@@ -1079,7 +1052,7 @@ export default function ClassDetailPage() {
                 {availableInstructors.length === 0 ? (
                   <MenuItem disabled value=""><em>해당 시간에 가능한 강사가 없습니다.</em></MenuItem>
                 ) : (
-                  availableInstructors.map((inst) => (
+                  availableInstructors.map((inst: any) => (
                     <MenuItem key={inst.instructorId || inst.id} value={inst.instructorId || inst.id}>{inst.instructorName || inst.name}</MenuItem>
                   ))
                 )}
@@ -1088,8 +1061,8 @@ export default function ClassDetailPage() {
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setIsAssignModalOpen(false)} color="inherit" disabled={isAssigning}>취소</Button>
-          <Button onClick={handleAssignInstructor} variant="contained" disabled={!selectedInstructorId || isAssigning}>{isAssigning ? "요청 중..." : "요청 보내기"}</Button>
+          <Button onClick={() => setIsAssignModalOpen(false)} color="inherit" disabled={assignMutation.isPending}>취소</Button>
+          <Button onClick={handleAssignInstructor} variant="contained" disabled={!selectedInstructorId || assignMutation.isPending}>{assignMutation.isPending ? "요청 중..." : "요청 보내기"}</Button>
         </DialogActions>
       </Dialog>
     </Box>

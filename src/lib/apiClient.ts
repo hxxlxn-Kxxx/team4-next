@@ -107,7 +107,7 @@ export const apiClient = {
     request<any>(`/instructors/weekly-availability?startDate=${startDate}`),
 
   // --- Contracts ---
-  getContracts: (monthStr?: string) => request<any>(`/contracts${monthStr ? `?month=${monthStr}` : ""}`),
+  getContracts: (queryString: string = "") => request<any>(`/contracts${queryString ? `?${queryString}` : ""}`),
   getContractById: (contractId: string) => request<any>(`/contracts/${contractId}`),
 
   // 계약 생성 (관리자) - POST /contracts

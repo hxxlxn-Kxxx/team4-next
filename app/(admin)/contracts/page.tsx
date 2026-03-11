@@ -53,10 +53,13 @@ type ContractRow = {
   id: string;
   contractId?: string;
   contractNumber?: string;
+  title?: string;
   instructorName?: string;
   instructor?: { name?: string };
   lessonTitle?: string;
   lesson?: { title?: string; lectureTitle?: string; sourceType?: string };
+  effectiveFrom?: string;
+  effectiveTo?: string;
   status: ContractStatus;
   createdAt?: string;
   latestVersion?: {
@@ -432,10 +435,26 @@ export default function ContractsPage() {
           ) : (
             <>
               {/* 헤더 */}
-              <Typography variant="h4" sx={{ mb: 0.5 }}>계약 상세 정보</Typography>
+              {drawerContract.title && (
+                <Typography variant="h4" sx={{ mb: 0.5 }}>{drawerContract.title}</Typography>
+              )}
+              {!drawerContract.title && (
+                <Typography variant="h4" sx={{ mb: 0.5 }}>계약 상세 정보</Typography>
+              )}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                 계약 번호: {drawerContract.contractNumber ?? drawerContract.contractId ?? drawerContract.id}
               </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                강사: {resolveInstructorName(drawerContract)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                수업: {resolveLessonTitle(drawerContract)}
+              </Typography>
+              {drawerContract.effectiveFrom && drawerContract.effectiveTo && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  기간: {formatDate(drawerContract.effectiveFrom)} ~ {formatDate(drawerContract.effectiveTo)}
+                </Typography>
+              )}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                 생성일: {formatDate(drawerContract.createdAt)}
               </Typography>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Box, Chip, CircularProgress, Grid, Stack, Typography } from "@mui/material";
+import { useRouter } from "next/navigation";
+import { Box, Chip, CircularProgress, Grid, Stack, Typography, Button } from "@mui/material";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
@@ -71,6 +72,7 @@ function isToday(isoStr: string): boolean {
 // 메인 컴포넌트
 // ─────────────────────────────────────────────
 export default function DashboardPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [calendarTitle, setCalendarTitle] = useState("2026년 3월");
   const calendarRef = useRef<FullCalendar | null>(null);
@@ -79,6 +81,14 @@ export default function DashboardPage() {
   const [lessons, setLessons] = useState<LessonRow[]>([]);
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 추천 현황 상태
+  const [recStats, setRecStats] = useState({
+    hasRecsCount: 0,
+    topRecReadyCount: 0,
+    firstLessonIdWithRec: null as string | null,
+  });
+  const [isRecLoading, setIsRecLoading] = useState(false);
 
   // 선택된 이벤트 툴팁
   const [selectedEvent, setSelectedEvent] = useState<{ title: string; location: string; status: LessonStatus } | null>(null);
@@ -118,12 +128,66 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  // 미배정 수업
+  const unassignedLessons = lessons.filter(
+    (l) => l.status === "PENDING" || l.status === "ACCEPTED"
+  );
+
+  // ── 추천 데이터 독립 로드 (미배정 수업 기준)
+  useEffect(() => {
+    if (unassignedLessons.length === 0) {
+      setRecStats({ hasRecsCount: 0, topRecReadyCount: 0, firstLessonIdWithRec: null });
+      return;
+    }
+
+    const loadRecs = async () => {
+      setIsRecLoading(true);
+      try {
+        let hasRecsCount = 0;
+        let topRecReadyCount = 0;
+        let firstLessonIdWithRec: string | null = null;
+
+        // 미배정 수업(최대 10개 등 너무 많지 않다고 가정, MVP 수준)
+        const promises = unassignedLessons.map(async (lesson) => {
+          try {
+            const data = await apiClient.getRecommendations(lesson.lessonId);
+            const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+            if (list.length > 0) {
+              if (!firstLessonIdWithRec) firstLessonIdWithRec = lesson.lessonId;
+              hasRecsCount++;
+              // 최고 추천 강사(1순위) 점수가 70 이상이거나 confidenceLabel 이 있는 경우 '준비됨'으로 카운트
+              if (list[0].score >= 70 || list[0].confidenceLabel) {
+                topRecReadyCount++;
+              }
+            }
+          } catch (e) {
+            // 무시 (오류난 수업은 추천 없는 것으로 간주)
+          }
+        });
+
+        await Promise.all(promises);
+
+        setRecStats({
+          hasRecsCount,
+          topRecReadyCount,
+          firstLessonIdWithRec,
+        });
+      } catch (err) {
+        console.error("추천 데이터 로드 실패:", err);
+      } finally {
+        setIsRecLoading(false);
+      }
+    };
+    
+    // 로딩이 완료되고 unassignedLessons가 세팅된 직후 한번만 실행되도록
+    // (간단 구현 위해 unassignedLessons.length를 의존성으로 하되 단순화)
+    loadRecs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unassignedLessons.length]);
+
   // ── 통계 계산 (프론트 계산)
   const todayLessons = lessons.filter(
     (l) => l.status !== "CANCELLED" && isToday(l.startsAt)
-  );
-  const unassignedLessons = lessons.filter(
-    (l) => l.status === "PENDING" || l.status === "ACCEPTED"
   );
   // 미서명 계약 = DRAFT | SENT | INSTRUCTOR_SIGNED
   const unsignedContracts = contracts.filter(
@@ -400,7 +464,7 @@ export default function DashboardPage() {
               )}
             </SurfaceCard>
 
-            {/* AI 대강 추천 (UI 유지) */}
+            {/* AI 대강 추천 */}
             <SurfaceCard
               sx={{
                 p: 3,
@@ -409,29 +473,63 @@ export default function DashboardPage() {
               }}
             >
               <Stack spacing={1.5}>
-                <Box
-                  sx={{
-                    width: 44, height: 44, borderRadius: 3,
-                    display: "grid", placeItems: "center",
-                    backgroundColor: "rgba(255, 255, 255, 0.12)",
-                  }}
-                >
-                  <AutoAwesomeRoundedIcon />
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <Box
+                    sx={{
+                      width: 44, height: 44, borderRadius: 3,
+                      display: "grid", placeItems: "center",
+                      backgroundColor: "rgba(255, 255, 255, 0.12)",
+                    }}
+                  >
+                    <AutoAwesomeRoundedIcon />
+                  </Box>
+                  {recStats.firstLessonIdWithRec && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => router.push(`/schedules/lessons/${recStats.firstLessonIdWithRec}`)}
+                      sx={{ 
+                        bgcolor: "rgba(255, 255, 255, 0.15)", 
+                        color: "#fff", 
+                        borderRadius: 2,
+                        textTransform: "none",
+                        fontSize: "0.75rem",
+                        '&:hover': { bgcolor: "rgba(255, 255, 255, 0.25)" }
+                      }}
+                    >
+                      추천 내역 확인
+                    </Button>
+                  )}
                 </Box>
                 <Typography variant="h6" sx={{ color: "inherit" }}>AI 대강 추천</Typography>
-                <Typography variant="body2" sx={{ opacity: 0.85 }}>
-                  수업 강의에 적합한 강사를 자동 추천합니다.
-                </Typography>
-                <Stack spacing={1.25} sx={{ pt: 1 }}>
-                  <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
-                    <CalendarTodayRoundedIcon sx={{ fontSize: 18 }} />
-                    <Typography variant="body2">미배정 수업 {unassignedLessons.length}건 대기 중</Typography>
-                  </Box>
-                  <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
-                    <BoltRoundedIcon sx={{ fontSize: 18 }} />
-                    <Typography variant="body2">강사 추천 기능 준비 중</Typography>
-                  </Box>
-                </Stack>
+                
+                {isRecLoading ? (
+                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 1 }}>
+                     <CircularProgress size={16} sx={{ color: "rgba(255,255,255,0.5)" }} />
+                     <Typography variant="body2" sx={{ opacity: 0.85 }}>추천 데이터를 불러오는 중...</Typography>
+                   </Box>
+                ) : (
+                  <>
+                    <Typography variant="body2" sx={{ opacity: 0.85, mb: 1 }}>
+                      미배정 수업에 적합한 강사를 자동 추천합니다.
+                    </Typography>
+                    <Stack spacing={1.25} sx={{ pt: 1, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                      <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
+                        <CalendarTodayRoundedIcon sx={{ fontSize: 18 }} />
+                        <Typography variant="body2">미배정 대기: <strong>{unassignedLessons.length}</strong>건</Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
+                        <BoltRoundedIcon sx={{ fontSize: 18, color: recStats.hasRecsCount > 0 ? "#FFD54F" : "inherit" }} />
+                        <Typography variant="body2">추천 가능 수업: <strong>{recStats.hasRecsCount}</strong>건</Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
+                        <Typography variant="body2" sx={{ pl: 3.5, opacity: 0.85 }}>
+                          ↳ 1순위 강사 매칭 완료: <strong>{recStats.topRecReadyCount}</strong>건
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </>
+                )}
               </Stack>
             </SurfaceCard>
 

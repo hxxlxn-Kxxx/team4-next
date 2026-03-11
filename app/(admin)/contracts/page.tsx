@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Box,
   CircularProgress,
@@ -132,9 +133,12 @@ function formatDateTime(iso?: string): string {
 }
 
 // ─────────────────────────────────────────────
-// 메인 컴포넌트
+// 메인 컴포넌트 내부 로직 (Suspense용)
 // ─────────────────────────────────────────────
-export default function ContractsPage() {
+function ContractsContent() {
+  const searchParams = useSearchParams();
+  const lessonIdParam = searchParams.get("lessonId");
+
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -169,6 +173,7 @@ export default function ContractsPage() {
       const params = new URLSearchParams();
       if (filterStatus) params.set("status", filterStatus);
       if (filterName) params.set("instructorName", filterName);
+      if (lessonIdParam) params.set("lessonId", lessonIdParam);
       const qs = params.toString();
 
       const data = await apiClient.getContracts(qs);
@@ -190,6 +195,22 @@ export default function ContractsPage() {
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
+
+  // lessonIdParam이 있고 데이터 로드가 완료되면 해당 계약 상세를 자동으로 연다.
+  useEffect(() => {
+    if (lessonIdParam && contracts.length > 0 && !selectedId) {
+      // lessonId가 명시적으로 달려있으면 해당 계약을 찾아서 연다.
+      const match = contracts.find(c => 
+        c.id === lessonIdParam || 
+        c.contractId === lessonIdParam || 
+        (c.lesson as any)?.id === lessonIdParam || 
+        (c as any).lessonId === lessonIdParam
+      );
+      if (match) {
+        setSelectedId(match.id);
+      }
+    }
+  }, [lessonIdParam, contracts, selectedId]);
 
   // ── 상세 API 조회 (드로어 열릴 때)
   useEffect(() => {
@@ -660,5 +681,13 @@ export default function ContractsPage() {
         </Box>
       </Drawer>
     </Box>
+  );
+}
+
+export default function ContractsPage() {
+  return (
+    <Suspense fallback={<Box display="flex" justifyContent="center" py={10}><CircularProgress /></Box>}>
+      <ContractsContent />
+    </Suspense>
   );
 }

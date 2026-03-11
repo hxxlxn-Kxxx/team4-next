@@ -176,11 +176,21 @@ export const apiClient = {
   getAvailableInstructors: (startsAt: string, endsAt: string) => 
     request<any>(`/lessons/available-instructors?startsAt=${startsAt}&endsAt=${endsAt}`),
 
-  //  강사 배정 API
+    // --- 배정 및 요청 관련 ---
+  
+  // 강사 배정 요청 (관리자) - POST /lessons/:lessonId/assign
   assignInstructor: (lessonId: string, instructorId: string) => 
     request<any>(`/lessons/${lessonId}/assign`, { 
       method: "POST", 
       body: JSON.stringify({ instructorId }) 
+    }),
+
+  // 배정 요청 응답 (강사/관리자 테스트용) - POST /assignments/:requestId/respond
+  // 백엔드 사양: { status: 'ACCEPTED' | 'REJECTED' }
+  respondAssignment: (requestId: string, payload: { status: "ACCEPTED" | "REJECTED" }) =>
+    request<any>(`/assignments/${requestId}/respond`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
     // --- 수업 상세 및 액션 ---

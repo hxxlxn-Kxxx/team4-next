@@ -9,6 +9,7 @@ import {
   Badge,
   Box,
   Collapse,
+  Divider,
   Drawer,
   IconButton,
   List,
@@ -20,12 +21,14 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  AccountCircle,
   ChatBubble,
   ExpandLess,
   ExpandMore,
   Logout,
   Notifications,
   Search,
+  Settings,
 } from '@mui/icons-material';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -35,6 +38,15 @@ import AtomNavItem from '@/src/components/atoms/AtomNavItem';
 import { adminNavigation } from './navigation';
 
 const drawerWidth = 272;
+
+interface User {
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  avatar?: string;
+}
+
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -46,6 +58,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     Schedules: pathname.startsWith('/schedules'),
   });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [user, setUser] = useState<User | null>(null);
+
 
 
   const activeSectionLabel = useMemo(() => {
@@ -69,6 +83,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error("Failed to parse user from localStorage", e);
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+
     refreshUnreadCount();
     const timer = setInterval(refreshUnreadCount, 30000);
     return () => clearInterval(timer);
@@ -251,7 +279,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     fontWeight: 700,
                   }}
                 >
-                  M
+                  {user?.name?.[0]?.toUpperCase() || 'M'}
                 </Avatar>
               </IconButton>
               <Menu
@@ -263,16 +291,40 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                 PaperProps={{
                   sx: {
-                    mt: 1,
-                    borderRadius: '12px 0 12px 12px',
-                    minWidth: 160,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                    mt: 1.5,
+                    borderRadius: '16px 0 16px 16px',
+                    minWidth: 220,
+                    boxShadow: '0 8px 32px rgba(37, 27, 16, 0.12)',
+                    border: '1px solid',
+                    borderColor: 'divider',
                   }
                 }}
               >
-                <MenuItem onClick={handleLogout}>
+                <Box sx={{ px: 2, py: 1.5 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    {user?.name || '관리자'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {user?.email || 'admin@free-b.kr'}
+                  </Typography>
+                </Box>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem onClick={() => router.push('/settings')}>
                   <ListItemIcon>
-                    <Logout fontSize="small" />
+                    <AccountCircle fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2">프로필 관리</Typography>
+                </MenuItem>
+                <MenuItem onClick={() => router.push('/settings')}>
+                  <ListItemIcon>
+                    <Settings fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2">설정</Typography>
+                </MenuItem>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+                  <ListItemIcon>
+                    <Logout fontSize="small" color="error" />
                   </ListItemIcon>
                   <Typography variant="body2">로그아웃</Typography>
                 </MenuItem>

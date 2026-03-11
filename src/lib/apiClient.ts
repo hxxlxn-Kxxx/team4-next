@@ -123,6 +123,17 @@ export const apiClient = {
   getSettlements: (month?: string) =>
     request<any>(`/settlements${month ? `?month=${month}` : ""}`),
 
+  // --- Notification Settings ---
+  // 알림 설정 조회 - GET /me/notification-settings
+  getNotificationSettings: () => request<any>("/me/notification-settings"),
+  // 알림 설정 저장 - PUT /me/notification-settings
+  updateNotificationSettings: (payload: { pushEnabled: boolean }) =>
+    request<any>("/me/notification-settings", { method: "PUT", body: JSON.stringify(payload) }),
+
+  // --- Company ---
+  // 현재 회사 정보 조회 - GET /companies/current (OwnerGuard)
+  getCurrentCompany: () => request<any>("/companies/current"),
+
   // --- Attendance ---
   getAttendances: () => request<any>("/attendances"),
   getAttendanceEvents: (params: { lessonId?: string; eventType?: string }) => {

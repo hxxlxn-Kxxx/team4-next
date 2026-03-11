@@ -21,6 +21,8 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import {
   Add,
@@ -155,8 +157,10 @@ export default function ContractsPage() {
   const [isReauthing, setIsReauthing] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
 
-  // 재인증 토큰 (sign 직전 reauth 결과 보관)
-  const [reauthToken, setReauthToken] = useState<string | null>(null);
+  // 재인증 토큰 및 동의 상태 (sign 직전 reauth 결과 보관)
+  const [signToken, setSignToken] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [consentGiven, setConsentGiven] = useState(false);
 
   // ── 목록 API 조회
   const fetchContracts = useCallback(async () => {
@@ -191,7 +195,9 @@ export default function ContractsPage() {
   useEffect(() => {
     if (!selectedId) {
       setDrawerContract(null);
-      setReauthToken(null);
+      setSignToken(null);
+      setExpiresAt(null);
+      setConsentGiven(false);
       return;
     }
     const fetchDetail = async () => {
@@ -259,17 +265,22 @@ export default function ContractsPage() {
   // ── 재인증 후 관리자 서명 핸들러
   const handleReauthAndSign = async () => {
     if (!contractId) return;
-    // Step 1: 재인증 토큰 발급
-    if (!reauthToken) {
+    
+    // Step 1: 재인증 토큰 발급 (signToken)
+    if (!signToken) {
       setIsReauthing(true);
       try {
         const res = await apiClient.reauthContract(contractId);
-        const token = res?.reauthToken ?? res?.token ?? res;
-        if (!token || typeof token !== "string") {
+        // 백엔드 응답 필드명 확인 (signToken 또는 reauthToken)
+        const token = res?.signToken || res?.reauthToken || res?.token || (typeof res === "string" ? res : null);
+        
+        if (!token) {
           throw new Error("재인증 토큰을 받지 못했습니다.");
         }
-        setReauthToken(token);
-        alert("재인증 완료. 아래 '서명하기' 버튼을 눌러 관리자 서명을 완료하세요.");
+        
+        setSignToken(token);
+        setExpiresAt(res?.expiresAt || null);
+        alert("재인증 완료. 내용을 확인하고 아래 동의 체크 후 '최종 서명하기'를 눌러주세요.");
       } catch (err: any) {
         alert(err.message || "재인증에 실패했습니다.");
       } finally {
@@ -278,13 +289,25 @@ export default function ContractsPage() {
       return;
     }
 
-    // Step 2: 서명
+    // Step 2: 서명 동의 여부 체크
+    if (!consentGiven) {
+      alert("서명 동의에 체크해주세요.");
+      return;
+    }
+
+    // Step 3: 최종 서명 시연
     setIsSigning(true);
     try {
-      const updated = await apiClient.signContract(contractId, { reauthToken });
+      const updated = await apiClient.signContract(contractId, { 
+        signToken,
+        consentGiven: true,
+        consentTextVersion: "v1.0" // 고정 버전 또는 서버 수신값 사용 가능
+      });
       alert("관리자 서명이 완료되었습니다!");
       setDrawerContract((prev) => (prev ? { ...prev, ...(updated?.data ?? updated) } : prev));
-      setReauthToken(null);
+      setSignToken(null);
+      setExpiresAt(null);
+      setConsentGiven(false);
       fetchContracts();
     } catch (err: any) {
       alert(err.message || "서명에 실패했습니다.");
@@ -593,19 +616,43 @@ export default function ContractsPage() {
 
                 {/* INSTRUCTOR_SIGNED → 관리자 재인증 & 서명 */}
                 {drawerContract.status === "INSTRUCTOR_SIGNED" && !adminSig && (
-                  <AtomButton
-                    sx={{ width: "100%", mb: 1.25 }}
-                    onClick={handleReauthAndSign}
-                    disabled={isReauthing || isSigning}
-                  >
-                    {isReauthing
-                      ? "재인증 중..."
-                      : isSigning
-                      ? "서명 처리 중..."
-                      : reauthToken
-                      ? "관리자 서명하기 (재인증 완료)"
-                      : "재인증 후 서명하기"}
-                  </AtomButton>
+                  <Box sx={{ mt: 1 }}>
+                    {signToken && (
+                      <Box sx={{ p: 2, mb: 2, bgcolor: "#FBF7ED", borderRadius: 2, border: "1px solid #EBDDC3" }}>
+                        <Typography variant="body2" fontWeight="bold" sx={{ mb: 1 }}>
+                          최종 서명 동의 사항 (v1.0)
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5, wordBreak: "keep-all" }}>
+                          본 계약의 내용(수업 정보, 강사 정보, 서명 일자 등)을 모두 확인하였으며, 회사 측 관리자로서 최종 서명하는 데 동의합니다.
+                        </Typography>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={consentGiven}
+                              onChange={(e) => setConsentGiven(e.target.checked)}
+                              size="small"
+                              sx={{ py: 0 }}
+                            />
+                          }
+                          label={<Typography variant="body2" fontWeight={600}>위 내용에 동의하며 서명합니다.</Typography>}
+                          sx={{ m: 0 }}
+                        />
+                      </Box>
+                    )}
+                    <AtomButton
+                      sx={{ width: "100%", mb: 1.25 }}
+                      onClick={handleReauthAndSign}
+                      disabled={isReauthing || isSigning || (signToken !== null && !consentGiven)}
+                    >
+                      {isReauthing
+                        ? "재인증 중..."
+                        : isSigning
+                        ? "서명 처리 중..."
+                        : signToken
+                        ? "관리자 최종 서명하기"
+                        : "관리자 인증 후 서명 단계 진입"}
+                    </AtomButton>
+                  </Box>
                 )}
               </Box>
             </>

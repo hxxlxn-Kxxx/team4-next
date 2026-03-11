@@ -123,7 +123,7 @@ export const apiClient = {
     request<any>(`/contracts/${contractId}/reauth`, { method: "POST" }),
 
   // 관리자 서명 - POST /contracts/:contractId/sign
-  signContract: (contractId: string, payload: { reauthToken: string }) =>
+  signContract: (contractId: string, payload: { consentGiven: boolean; consentTextVersion: string; signToken: string; signatureFileKey?: string; ipAddress?: string }) =>
     request<any>(`/contracts/${contractId}/sign`, { method: "POST", body: JSON.stringify(payload) }),
 
   // --- Settlements ---

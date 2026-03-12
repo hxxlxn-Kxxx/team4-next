@@ -4,6 +4,7 @@ export const queryKeys = {
     all: ["lessons"] as const,
     list: (filters: Record<string, any>) => ["lessons", "list", filters] as const,
     detail: (id: string | number) => ["lessons", "detail", id] as const,
+    recommendations: (id: string | number) => ["lessons", "recommendations", id] as const,
   },
   
   // Contracts

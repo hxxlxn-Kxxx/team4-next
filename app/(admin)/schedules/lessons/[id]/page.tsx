@@ -167,7 +167,7 @@ function RecommendationsPanel({
   };
 
   const { data: recsData, isLoading, isFetching, error: queryError, refetch } = useQuery({
-    queryKey: ["recommendations", lessonId],
+    queryKey: queryKeys.lessons.recommendations(lessonId),
     queryFn: async () => {
       const data = await apiClient.getRecommendations(lessonId);
       return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];

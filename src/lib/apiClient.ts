@@ -161,6 +161,32 @@ export const apiClient = {
   // 현재 회사 정보 조회 - GET /companies/current (OwnerGuard)
   getCurrentCompany: () => request<any>("/companies/current"),
 
+  // 회사 대표 도장 메타데이터 조회 - GET /companies/current/seal-image
+  getCompanySealMetadata: () => request<any>("/companies/current/seal-image"),
+
+  // 회사 대표 도장 업로드 - PUT /companies/current/seal-image
+  updateCompanySeal: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<any>("/companies/current/seal-image", {
+      method: "PUT",
+      body: formData,
+    });
+  },
+
+  // 회사 대표 도장 파일 조회 (Blob 형식) - GET /companies/current/seal-image/file
+  getCompanySealFile: async () => {
+    const token = getToken();
+    const url = `${BASE_URL}/companies/current/seal-image/file`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    });
+    if (!response.ok) throw new Error("도장 파일을 불러오지 못했습니다.");
+    return await response.blob();
+  },
+
   // --- Attendance ---
   getAttendances: () => request<any>("/attendances"),
   getAttendanceEvents: (params: { lessonId?: string; eventType?: string }) => {

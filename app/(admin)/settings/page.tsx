@@ -14,7 +14,7 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
-import { Business, NotificationsActive, Person, Save, Tune } from "@mui/icons-material";
+import { Business, NotificationsActive, Person, Save, Tune, CloudUpload, Image as ImageIcon, Refresh } from "@mui/icons-material";
 
 import AtomButton from "@/src/components/atoms/AtomButton";
 import AtomInput from "@/src/components/atoms/AtomInput";
@@ -62,6 +62,15 @@ export default function SettingsPage() {
   const [isCompanyLoading, setIsCompanyLoading] = useState(true);
   const [companyError, setCompanyError] = useState<string | null>(null);
 
+  // ── 회사 도장 상태
+  const [sealMetadata, setSealMetadata] = useState<any>(null);
+  const [isSealLoading, setIsSealLoading] = useState(false);
+  const [sealError, setSealError] = useState<string | null>(null);
+  const [isUploadingSeal, setIsUploadingSeal] = useState(false);
+  const [sealVersion, setSealVersion] = useState(0); // 미리보기 캐시 방지용
+  const [hasSealImageError, setHasSealImageError] = useState(false);
+  const [sealImageUrl, setSealImageUrl] = useState<string | null>(null);
+
   // ── 알림 설정 로드
   useEffect(() => {
     const load = async () => {
@@ -93,6 +102,89 @@ export default function SettingsPage() {
     };
     load();
   }, []);
+
+  // ── 회사 도장 정보 로드
+  const loadSealMetadata = async () => {
+    setIsSealLoading(true);
+    setSealError(null);
+    setHasSealImageError(false);
+    try {
+      const data = await apiClient.getCompanySealMetadata();
+      setSealMetadata(data?.data ?? data);
+    } catch (err: any) {
+      // 도장이 없는 경우 404가 날 수 있으므로 에러 처리는 유연하게
+      console.log("Seal metadata fetch error (likely no seal):", err);
+      setSealMetadata(null);
+    } finally {
+      setIsSealLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSealMetadata();
+  }, []);
+
+  // ── 도장 이미지 Blob 로드 (인증 헤더 포함을 위해 fetch 사용)
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    
+    const loadFile = async () => {
+      if (!sealMetadata) {
+        setSealImageUrl(null);
+        return;
+      }
+      try {
+        const blob = await apiClient.getCompanySealFile();
+        objectUrl = URL.createObjectURL(blob);
+        setSealImageUrl(objectUrl);
+        setHasSealImageError(false);
+      } catch (err) {
+        console.error("Failed to load seal image blob:", err);
+        setHasSealImageError(true);
+      }
+    };
+
+    loadFile();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [sealMetadata, sealVersion]);
+
+  // ── 도장 업로드 핸들러
+  const handleSealUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 1. 형식 체크 (PNG)
+    if (file.type !== "image/png") {
+      alert("PNG 파일만 업로드 가능합니다.");
+      return;
+    }
+
+    // 2. 용량 체크 (1MB)
+    if (file.size > 1024 * 1024) {
+      alert("파일 용량은 1MB 이하여야 합니다.");
+      return;
+    }
+
+    setIsUploadingSeal(true);
+    setSealError(null);
+    setHasSealImageError(false);
+    try {
+      await apiClient.updateCompanySeal(file);
+      await loadSealMetadata();
+      setSealVersion((v) => v + 1); // 이미지 캐시 갱신
+      alert("회사 도장이 성공적으로 업로드되었습니다.");
+    } catch (err: any) {
+      setSealError(err.message || "도장 업로드에 실패했습니다.");
+      alert(`업로드 실패: ${err.message}`);
+    } finally {
+      setIsUploadingSeal(false);
+      // input 초기화
+      e.target.value = "";
+    }
+  };
 
   // ── 알림 저장
   const handleSaveNotif = async () => {
@@ -284,6 +376,105 @@ export default function SettingsPage() {
                   <Typography variant="caption" color="text.disabled">
                     회사 정보 수정은 관리자 문의를 통해 진행해주세요.
                   </Typography>
+
+                  <Divider sx={{ my: 1 }} />
+
+                  {/* 도장 관리 섹션 */}
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                      <Box>
+                        <Box sx={{ fontWeight: 700 }}>회사 대표 도장 관리</Box>
+                        <Box sx={{ color: "text.secondary", fontSize: 13, mt: 0.5 }}>
+                          전자계약 체결 시 사용되는 회사의 공식 인감 이미지입니다.
+                        </Box>
+                      </Box>
+                      <AtomButton
+                        size="small"
+                        atomVariant="outline"
+                        startIcon={<Refresh />}
+                        onClick={loadSealMetadata}
+                        disabled={isSealLoading}
+                      >
+                        새로고침
+                      </AtomButton>
+                    </Stack>
+
+                    <SurfaceCard sx={{ p: 3, border: "1px dashed #EFD9A2", backgroundColor: "rgba(239, 217, 162, 0.05)", boxShadow: "none" }}>
+                      <Stack direction={{ xs: "column", md: "row" }} spacing={4} alignItems="center">
+                        {/* 미리보기 영역 */}
+                        <Box
+                          sx={{
+                            width: 140,
+                            height: 140,
+                            border: "1px solid #EBDDC3",
+                            borderRadius: "12px",
+                            backgroundColor: "#FFF",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            overflow: "hidden",
+                            position: "relative",
+                            flexShrink: 0,
+                            backgroundImage: "radial-gradient(#EEE 10%, transparent 10%), radial-gradient(#EEE 10%, transparent 10%)",
+                            backgroundPosition: "0 0, 8px 8px",
+                            backgroundSize: "16px 16px"
+                          }}
+                        >
+                          {isSealLoading ? (
+                            <CircularProgress size={24} />
+                          ) : (sealMetadata && sealImageUrl && !hasSealImageError) ? (
+                            <Box
+                              component="img"
+                              src={sealImageUrl}
+                              alt="Company Seal"
+                              sx={{
+                                maxWidth: "100%",
+                                maxHeight: "100%",
+                                objectFit: "contain"
+                              }}
+                              onError={() => setHasSealImageError(true)}
+                            />
+                          ) : (
+                            <Stack alignItems="center" spacing={1} color="text.disabled">
+                              <ImageIcon sx={{ fontSize: 40, opacity: 0.3 }} />
+                              <Typography variant="caption">{sealMetadata ? "이미지 오류" : "미등록"}</Typography>
+                            </Stack>
+                          )}
+                        </Box>
+
+                        {/* 업로드 컨트롤 */}
+                        <Box sx={{ flexGrow: 1 }}>
+                          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                            {sealMetadata ? "도장 교체하기" : "도장 등록하기"}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, wordBreak: "keep-all" }}>
+                            • <strong>PNG 형식</strong>의 이미지 파일만 허용됩니다.<br />
+                            • 서명 시 깔끔한 노출을 위해 <strong>투명 배경</strong> 처리를 권장합니다.<br />
+                            • 파일 용량 제한: <strong>최대 1MB</strong>
+                          </Typography>
+                          
+                          <input
+                            type="file"
+                            accept="image/png"
+                            id="seal-upload-input"
+                            style={{ display: "none" }}
+                            onChange={handleSealUpload}
+                            disabled={isUploadingSeal}
+                          />
+                          <label htmlFor="seal-upload-input">
+                            <AtomButton
+                              component="span"
+                              startIcon={<CloudUpload />}
+                              loading={isUploadingSeal}
+                              disabled={isUploadingSeal}
+                            >
+                              {isUploadingSeal ? "업로드 중..." : sealMetadata ? "새 도장 업로드" : "도장 업로드"}
+                            </AtomButton>
+                          </label>
+                        </Box>
+                      </Stack>
+                    </SurfaceCard>
+                  </Box>
                 </Stack>
               )}
             </Stack>

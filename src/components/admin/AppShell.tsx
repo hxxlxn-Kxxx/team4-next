@@ -140,27 +140,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
           },
         }}
       >
-        <Toolbar disableGutters sx={{ px: 1.5, minHeight: '72px !important' }}>
+        <Toolbar disableGutters sx={{ px: 2, minHeight: '80px !important' }}>
           <Box
             onClick={() => router.push("/dashboard")}
             sx={{
-              px: 2.25,
-              py: 1.75,
-              borderRadius: '18px 0 18px 18px',
-              backgroundColor: '#FBF7ED',
-              border: '1px solid #EFD9A2',
               display: 'flex',
               alignItems: 'center',
-              gap: 1.5,
+              gap: 2,
               cursor: "pointer",
+              transition: "opacity 0.2s",
               "&:hover": {
-                backgroundColor: "#F5EEDC",
+                opacity: 0.8,
               },
-              transition: "background-color 0.2s",
             }}
           >
-            <Image src="/bee.svg" alt="free-b bee logo" width={38} height={30} />
-            <Typography variant="h4" sx={{ color: 'primary.main', lineHeight: 1 }}>
+            <Image src="/bee.svg" alt="free-b bee logo" width={48} height={38} />
+            <Typography variant="h4" sx={{ 
+              color: 'primary.main', 
+              lineHeight: 1,
+              fontWeight: 800,
+              fontSize: '1.75rem',
+              letterSpacing: '-0.02em'
+            }}>
               free-b
             </Typography>
           </Box>

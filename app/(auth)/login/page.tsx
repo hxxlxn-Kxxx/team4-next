@@ -23,19 +23,19 @@ const DEMO_ADMINS = [
   {
     name: "김도윤 관리자",
     email: "admin1@museum-demo.kr",
-    description: "메인 발표 계정",
+    description: "전체 시스템 및 보안 관리",
   },
   {
     name: "박서연 관리자",
     email: "admin2@museum-demo.kr",
-    description: "보조 시나리오 확인용",
+    description: "운영 현황 및 정산 관리",
   },
 ];
 
 const highlights = [
-  "실시간 수업 운영 현황",
-  "강사 배정 및 계약 관리",
-  "정산/설정 관리자 워크플로우",
+  "실시간 운영 현황",
+  "스마트 배정 및 계약",
+  "효율적인 정산 프로세스",
 ];
 
 export default function LoginPage() {
@@ -61,9 +61,9 @@ export default function LoginPage() {
 
       router.push("/dashboard");
     } catch (error: any) {
-      console.error("demo login error:", error);
+      console.error("login error:", error);
       setErrorMessage(
-        error.message || "서버와 연결할 수 없습니다. 백엔드 상태를 확인해주세요.",
+        error.message || "서버와 연결할 수 없습니다. 관리자에게 문의해주세요.",
       );
     } finally {
       setLoadingEmail(null);
@@ -77,7 +77,7 @@ export default function LoginPage() {
         px: { xs: 2, md: 4 },
         py: { xs: 3, md: 4 },
         background:
-          "radial-gradient(circle at top left, rgba(243, 199, 66, 0.22), transparent 28%), linear-gradient(180deg, #FFF9EF 0%, #F7F1E4 100%)",
+          "radial-gradient(circle at top left, rgba(243, 199, 66, 0.15), transparent 35%), linear-gradient(180deg, #FFF9EF 0%, #F7F1E4 100%)",
       }}
     >
       <Box
@@ -85,14 +85,14 @@ export default function LoginPage() {
           maxWidth: 1280,
           mx: "auto",
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", lg: "1.05fr 0.95fr" },
+          gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
           gap: 3,
           alignItems: "stretch",
         }}
       >
         <SurfaceCard
           sx={{
-            p: { xs: 3, md: 5 },
+            p: { xs: 3, md: 6 },
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
@@ -101,95 +101,70 @@ export default function LoginPage() {
               "linear-gradient(160deg, rgba(255, 246, 220, 0.95), rgba(255, 249, 239, 1))",
           }}
         >
-          <Stack spacing={3}>
+          <Stack spacing={4}>
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
               <Box>
                 <Typography
                   variant="overline"
-                  sx={{ color: "text.secondary", letterSpacing: "0.18em" }}
+                  sx={{ color: "text.secondary", letterSpacing: "0.2em", fontWeight: 700 }}
                 >
-                  ADMIN CONSOLE
+                  ADMIN PORTAL
                 </Typography>
-                <Typography variant="h2" sx={{ mt: 1 }}>
-                  free-b
-                </Typography>
+                
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
+                  <Image src="/bee.svg" alt="free-b bee logo" width={56} height={46} priority />
+                  <Typography variant="h2" sx={{ fontWeight: 900, color: '#251B10', lineHeight: 1 }}>
+                    free-b
+                  </Typography>
+                </Stack>
               </Box>
-              <Box
-                sx={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: "22px 0 22px 22px",
-                  display: "grid",
-                  placeItems: "center",
-                  backgroundColor: "#F3C742",
-                  overflow: "hidden",
-                  flexShrink: 0,
-                }}
-              >
-                <Image src="/bee.svg" alt="free-b bee logo" width={50} height={40} priority />
-              </Box>
+             
             </Stack>
 
-            <Box sx={{ maxWidth: 560 }}>
+            <Box>
               <Typography
                 variant="h1"
                 sx={{
-                  mb: 2,
-                  fontSize: { xs: "3rem", md: "4.2rem", xl: "5rem" },
-                  lineHeight: { xs: 1.08, md: 1.04 },
+                  mb: 3,
+                  fontSize: { xs: "2.8rem", md: "3.8rem", xl: "4.5rem" },
+                  lineHeight: 1.1,
                   letterSpacing: "-0.04em",
+                  fontWeight: 900,
+                  color: "#251B10",
                 }}
               >
-                발표용 관리자
+                Smart Service
                 <br />
-                데모 진입
+                Management
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 480 }}>
-                디자인이 반영된 관리자 화면을 바로 확인할 수 있도록 데모 계정으로 빠르게
-                진입합니다.
+              <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 480, fontWeight: 500, lineHeight: 1.6, opacity: 0.8 }}>
+                관리자 전용 대시보드입니다. <br />
+                허가된 계정으로 로그인하여 서비스를 관리해 주세요.
               </Typography>
             </Box>
 
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+            <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", gap: 1 }}>
               {highlights.map((item) => (
                 <AtomBadge key={item} tone="draft" label={item} />
               ))}
             </Stack>
           </Stack>
 
-          <Box
-            sx={{
-              mt: 4,
-              p: 3,
-              borderRadius: "22px 0 22px 22px",
-              background:
-                "linear-gradient(140deg, rgba(37, 27, 16, 0.98), rgba(103, 72, 29, 0.94))",
-              color: "#FFF9EF",
-            }}
-          >
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-              <AdminPanelSettingsRoundedIcon />
-              <Typography variant="h6" sx={{ color: "inherit" }}>
-                Demo Access Flow
-              </Typography>
-            </Stack>
-            <Typography variant="body2" sx={{ opacity: 0.88, maxWidth: 420 }}>
-              계정 선택 후 로그인 토큰을 저장하고 `/dashboard`로 이동합니다. 백엔드 서버와
-              seed 데이터가 실행 중이어야 합니다.
-            </Typography>
-          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.6 }}>
+            Authorized access only. Unauthorized attempts are strictly prohibited.
+          </Typography>
         </SurfaceCard>
 
         <SurfaceCard
           sx={{
-            p: { xs: 3, md: 4 },
+            p: { xs: 3, md: 5 },
             minHeight: { lg: "calc(100vh - 64px)" },
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
           }}
         >
-          <Box sx={{ maxWidth: 480, mx: "auto", width: "100%" }}>
+          <Box sx={{ maxWidth: 440, mx: "auto", width: "100%" }}>
             <Box
               sx={{
                 width: 56,
@@ -199,17 +174,17 @@ export default function LoginPage() {
                 placeItems: "center",
                 color: "#251B10",
                 backgroundColor: "#FFF0C2",
-                mb: 2,
+                mb: 3,
               }}
             >
               <LockOutlinedIcon />
             </Box>
 
-            <Typography variant="h2" sx={{ mb: 1.5 }}>
-              관리자 접속
+            <Typography variant="h3" sx={{ mb: 1.5, fontWeight: 800 }}>
+              관리자 로그인
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-              발표용 데모 계정을 선택하면 바로 관리자 화면으로 진입합니다.
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 5, fontWeight: 500 }}>
+              접속할 계정을 선택하여 관리 포털에 진입합니다.
             </Typography>
 
             <Stack spacing={2}>

@@ -6,6 +6,10 @@ import {
   Box,
   CircularProgress,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Drawer,
   Grid,
   InputAdornment,
@@ -118,14 +122,22 @@ const formatUtcToLocal = (utcString: string) => {
 export default function ClassManagementPage() {
   const [filterStatus, setFilterStatus] = useState<"ALL" | LessonStatus>("ALL");
   const [searchName, setSearchName] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [selectedInstructorId, setSelectedInstructorId] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [partialSuccessData, setPartialSuccessData] = useState<{ lessonId: string } | null>(null);
   const router = useRouter();
 
   // ── 데이터 로드 (React Query)
-  const queryString = filterStatus !== "ALL" ? `status=${filterStatus}` : "";
+  const queryString = [
+    filterStatus !== "ALL" ? `status=${filterStatus}` : "",
+    startDate ? `startDate=${startDate}` : "",
+    selectedInstructorId ? `instructorId=${selectedInstructorId}` : ""
+  ].filter(Boolean).join("&");
+
   const { data: classes = [], isLoading: isLoadingList, error } = useQuery({
-    queryKey: queryKeys.lessons.list({ status: filterStatus }),
+    queryKey: queryKeys.lessons.list({ status: filterStatus, startDate, instructorId: selectedInstructorId }),
     queryFn: async () => {
       const data = await apiClient.getLessons(queryString);
       const rows = Array.isArray(data) ? data : data.data || data.items || [];
@@ -134,6 +146,15 @@ export default function ClassManagementPage() {
   });
 
   const listError = error instanceof Error ? error.message : "";
+
+  // 강사 목록 조회 (필터용)
+  const { data: allInstructors = [] } = useQuery({
+    queryKey: ["instructors", "all"],
+    queryFn: async () => {
+      const data = await apiClient.getInstructors();
+      return Array.isArray(data) ? data : data.data || [];
+    }
+  });
 
   // 검색어 필터링 (클라이언트)
   const filteredClasses = searchName.trim()
@@ -211,22 +232,45 @@ export default function ClassManagementPage() {
         deliveryNotes: formData.deliveryNotes || undefined,
       };
 
-      const createdLesson = await apiClient.createLesson(createPayload);
-      const newLessonId = createdLesson.lessonId || createdLesson.id;
+      let newLessonId: string | undefined;
+      try {
+        const createdLesson = await apiClient.createLesson(createPayload);
+        newLessonId = createdLesson.lessonId || createdLesson.id;
+      } catch (error) {
+        throw new Error("LESSON_CREATE_FAILED:" + (error instanceof Error ? error.message : "수업 생성 실패"));
+      }
 
       if (formData.instructorId && newLessonId) {
-        await apiClient.assignInstructor(newLessonId, formData.instructorId);
+        try {
+          await apiClient.assignInstructor(newLessonId, formData.instructorId);
+        } catch (error) {
+          // 부분 성공: 수업은 생성되었으나 배정 요청만 실패
+          return { partialSuccess: true, lessonId: newLessonId, error: error instanceof Error ? error.message : "배정 요청 실패" };
+        }
       }
+      
+      return { partialSuccess: false, lessonId: newLessonId };
     },
-    onSuccess: () => {
-      setIsDrawerOpen(false);
-      setFormData(initialFormData);
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+
+      if (data?.partialSuccess) {
+        setPartialSuccessData({ lessonId: data.lessonId! });
+        // Drawer를 닫지 않고 부분 성공 알림 표시
+      } else {
+        setIsDrawerOpen(false);
+        setFormData(initialFormData);
+        alert("수업 생성 및 강사 배정 요청이 완료되었습니다.");
+      }
     },
-    onError: (error) => {
-      console.error("lesson create error:", error);
-      alert(error instanceof Error ? error.message : "수업 생성에 실패했습니다.");
+    onError: (error: any) => {
+      const msg = error.message || "";
+      if (msg.startsWith("LESSON_CREATE_FAILED:")) {
+        alert("수업 생성에 실패했습니다.\n" + msg.replace("LESSON_CREATE_FAILED:", ""));
+      } else {
+        alert("오류가 발생했습니다.\n" + msg);
+      }
     },
   });
 
@@ -260,7 +304,7 @@ export default function ClassManagementPage() {
         <AtomInput
           label="수업명"
           size="small"
-          sx={{ minWidth: 220 }}
+          sx={{ flex: 1, minWidth: 200 }}
           placeholder="수업명 입력"
           value={searchName}
           onChange={(event) => setSearchName(event.target.value)}
@@ -271,7 +315,7 @@ export default function ClassManagementPage() {
           size="small"
           value={filterStatus}
           onChange={(event) => setFilterStatus(event.target.value as "ALL" | LessonStatus)}
-          sx={{ minWidth: 220 }}
+          sx={{ flex: 1, minWidth: 150 }}
         >
           {STATUS_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>
@@ -279,7 +323,35 @@ export default function ClassManagementPage() {
             </MenuItem>
           ))}
         </AtomInput>
-        <AtomButton startIcon={<Search />}>
+        <AtomInput
+          type="date"
+          label="시작 일정"
+          size="small"
+          value={startDate}
+          onChange={(event) => setStartDate(event.target.value)}
+          sx={{ flex: 1, minWidth: 160 }}
+          InputLabelProps={{ shrink: true }}
+        />
+        <AtomInput
+          select
+          label="담당 강사"
+          size="small"
+          value={selectedInstructorId}
+          onChange={(event) => setSelectedInstructorId(event.target.value)}
+          sx={{ flex: 1, minWidth: 160 }}
+        >
+          <MenuItem value="">전체 강사</MenuItem>
+          {allInstructors.map((ins: any) => (
+            <MenuItem key={ins.instructorId} value={ins.instructorId}>
+              {ins.name}
+            </MenuItem>
+          ))}
+        </AtomInput>
+        <AtomButton 
+          startIcon={<Search />} 
+          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.lessons.all })}
+          sx={{ height: 40 }}
+        >
           검색
         </AtomButton>
       </FilterBar>
@@ -565,6 +637,41 @@ export default function ClassManagementPage() {
           </Box>
         </Box>
       </Drawer>
+
+      {partialSuccessData && (
+        <Dialog 
+          open={!!partialSuccessData} 
+          onClose={() => {
+            setPartialSuccessData(null);
+            setIsDrawerOpen(false);
+            setFormData(initialFormData);
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>부분 성공 안내</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              수업 정보는 성공적으로 등록되었으나, 강사 배정 요청 단계에서 오류가 발생했습니다.
+            </Typography>
+            <Alert severity="warning">
+              강사 배정 요청은 수업 상세 페이지에서 다시 진행할 수 있습니다.
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ p: 4, pt: 0 }}>
+            <AtomButton 
+              onClick={() => {
+                const id = partialSuccessData.lessonId;
+                setPartialSuccessData(null);
+                setIsDrawerOpen(false);
+                setFormData(initialFormData);
+                router.push(`/schedules/lessons/${id}`);
+              }}
+              fullWidth
+            >
+              생성된 수업 상세로 이동
+            </AtomButton>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 }

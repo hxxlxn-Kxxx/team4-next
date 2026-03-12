@@ -27,6 +27,9 @@ import { apiClient } from "@/src/lib/apiClient";
 // ─────────────────────────────────────────────
 type NotificationSettings = {
   pushEnabled: boolean;
+  lessonReminder?: boolean;
+  paymentNotification?: boolean;
+  chatNotification?: boolean;
   updatedAt?: string;
 };
 
@@ -192,7 +195,12 @@ export default function SettingsPage() {
     setNotifError(null);
     setNotifSuccess(false);
     try {
-      await apiClient.updateNotificationSettings({ pushEnabled: notifSettings.pushEnabled });
+      await apiClient.updateNotificationSettings({ 
+        pushEnabled: notifSettings.pushEnabled,
+        lessonReminder: notifSettings.lessonReminder,
+        paymentNotification: notifSettings.paymentNotification,
+        chatNotification: notifSettings.chatNotification,
+      });
       setNotifSuccess(true);
       setTimeout(() => setNotifSuccess(false), 3000);
     } catch (err: any) {
@@ -298,25 +306,47 @@ export default function SettingsPage() {
                     </Stack>
                   </SurfaceCard>
 
-                  {/* 세부 항목: 백엔드 미지원으로 UI 참고 표시만 */}
-                  <Alert severity="info" sx={{ borderRadius: 2 }}>
-                    아래 세부 알림 항목은 현재 백엔드에서 개별 저장을 지원하지 않습니다. 위 토글로 전체를 제어합니다.
-                  </Alert>
-
+                   {/* 세부 항목: 토글 연동 */}
                   {[
-                    { title: "강사 현장 체크인 지각 알림", description: "수업 시작 전까지 체크인하지 않은 경우 경고를 띄웁니다." },
-                    { title: "전자계약 만료 임박 알림", description: "강사의 계약 종료일이 다가오면 대시보드에 표시합니다." },
-                    { title: "강사의 대강(대체강사) 요청 알림", description: "강사가 앱에서 긴급 대강을 요청했을 때 알림을 받습니다." },
-                    { title: "시스템 오류 보고 알림", description: "백엔드 장애 또는 서명 오류가 발생했을 때 관리자에게 전달합니다." },
+                    { 
+                      id: 'lessonReminder',
+                      title: "강사 현장 체크인 지각 알림", 
+                      description: "수업 시작 전까지 체크인하지 않은 경우 경고를 띄웁니다.",
+                      checked: !!notifSettings.lessonReminder
+                    },
+                    { 
+                      id: 'paymentNotification',
+                      title: "전자계약 만료 임박 알림", 
+                      description: "강사의 계약 종료일이 다가오면 대시보드에 표시합니다.",
+                      checked: !!notifSettings.paymentNotification
+                    },
+                    { 
+                      id: 'chatNotification',
+                      title: "강사의 대강(대체강사) 요청 알림", 
+                      description: "강사가 앱에서 긴급 대강을 요청했을 때 알림을 받습니다.",
+                      checked: !!notifSettings.chatNotification
+                    },
                   ].map((item) => (
-                    <SurfaceCard key={item.title} sx={{ p: 2, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "none", opacity: 0.55 }}>
+                    <SurfaceCard key={item.id} sx={{ p: 2, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "none" }}>
                       <Box>
                         <Box sx={{ fontWeight: 600 }}>{item.title}</Box>
                         <Box sx={{ fontSize: 14, color: "text.secondary", mt: 0.5 }}>{item.description}</Box>
                       </Box>
-                      <Switch checked={notifSettings.pushEnabled} disabled color="primary" />
+                      <Switch 
+                        checked={item.checked} 
+                        onChange={(e) => setNotifSettings(prev => ({ ...prev, [item.id]: e.target.checked }))}
+                        color="primary" 
+                      />
                     </SurfaceCard>
                   ))}
+
+                  <SurfaceCard sx={{ p: 2, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "none", opacity: 0.55 }}>
+                    <Box>
+                      <Box sx={{ fontWeight: 600 }}>시스템 오류 보고 알림</Box>
+                      <Box sx={{ fontSize: 14, color: "text.secondary", mt: 0.5 }}>백엔드 장애 또는 서명 오류가 발생했을 때 관리자에게 전달합니다.</Box>
+                    </Box>
+                    <Switch checked={notifSettings.pushEnabled} disabled color="primary" />
+                  </SurfaceCard>
 
                   {/* 저장 버튼 */}
                   <Box sx={{ display: "flex", justifyContent: "flex-end", pt: 1 }}>

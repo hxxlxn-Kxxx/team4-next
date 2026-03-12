@@ -401,6 +401,8 @@ export default function ChatDrawer({ open, onClose, onUnreadCountChange }: ChatD
                         </Badge>
                       </ListItemAvatar>
                       <ListItemText
+                        primaryTypographyProps={{ component: 'div' }}
+                        secondaryTypographyProps={{ component: 'div' }}
                         primary={
                           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: 'center' }}>
                             <Typography variant="body1" fontWeight={isUnread ? 800 : 600} color="#251B10">

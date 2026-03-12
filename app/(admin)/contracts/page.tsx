@@ -24,6 +24,7 @@ import {
   Typography,
   Checkbox,
   FormControlLabel,
+  IconButton,
 } from "@mui/material";
 import {
   Add,
@@ -34,6 +35,7 @@ import {
   Search,
   Send,
   VerifiedUser,
+  Close,
 } from "@mui/icons-material";
 
 import PageHeader from "@/src/components/admin/PageHeader";
@@ -539,7 +541,13 @@ function ContractsContent() {
 
       {/* ── 상세 드로어 */}
       <Drawer anchor="right" open={Boolean(selectedId)} onClose={() => setSelectedId(null)}>
-        <Box sx={{ width: 480, p: 4, display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#FFF9EF" }}>
+        <Box sx={{ width: 480, p: 4, pt: 6, display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#FFF9EF", position: "relative" }}>
+          <IconButton 
+            onClick={() => setSelectedId(null)} 
+            sx={{ position: "absolute", top: 12, right: 12, color: "text.secondary" }}
+          >
+            <Close />
+          </IconButton>
           {isDrawerLoading ? (
             <Box display="flex" justifyContent="center" alignItems="center" flexGrow={1}>
               <CircularProgress />

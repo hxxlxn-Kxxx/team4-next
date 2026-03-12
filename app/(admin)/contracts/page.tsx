@@ -613,15 +613,37 @@ function ContractsContent() {
                 </Stack>
               </SurfaceCard>
 
-              {/* PDF 열람 버튼 */}
-              <AtomButton
-                atomVariant="outline"
-                size="large"
-                startIcon={<PictureAsPdf />}
-                sx={{ width: "100%", mb: "auto", borderStyle: "dashed", borderWidth: 2 }}
-              >
-                계약서 원본 PDF 열람
-              </AtomButton>
+              {/* PDF 열람 버튼 (FULLY_SIGNED 일 때만 활성화) */}
+              {drawerContract.status === "FULLY_SIGNED" ? (
+                <AtomButton
+                  atomVariant="outline"
+                  size="large"
+                  startIcon={<PictureAsPdf />}
+                  sx={{ width: "100%", mb: "auto", borderStyle: "dashed", borderWidth: 2 }}
+                >
+                  계약서 최종 PDF 열람
+                </AtomButton>
+              ) : (
+                <Box
+                  sx={{
+                    width: "100%",
+                    mb: "auto",
+                    p: 2,
+                    border: "1px dashed #7A6A58",
+                    borderRadius: 2,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                    opacity: 0.7,
+                    backgroundColor: "rgba(122, 106, 88, 0.05)",
+                  }}
+                >
+                  <PictureAsPdf sx={{ color: "#7A6A58" }} />
+                  <Typography variant="body2" color="text.secondary">
+                    계약 완료 후 최종 PDF가 생성됩니다.
+                  </Typography>
+                </Box>
+              )}
 
               {/* 액션 버튼 영역 */}
               <Box sx={{ pt: 3, borderTop: "1px solid #EBDDC3" }}>

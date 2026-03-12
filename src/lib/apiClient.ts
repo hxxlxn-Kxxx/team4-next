@@ -1,5 +1,5 @@
-// src/lib/apiClient.ts
 import { ApiError } from "./apiError";
+import { LessonGpsStatus } from "../types/backend";
 
 // 백엔드 명세에는 API_URL이지만, 기존에 쓰시던 API_BASE_URL도 호환되게 함.
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
@@ -214,7 +214,7 @@ export const apiClient = {
   getAttendances: () => request<any>("/attendances"),
   // 오늘 수업 GPS 요약 상태 - GET /lessons/gps-status?date=YYYY-MM-DD
   getGpsStatus: (date: string) => 
-    request<any>(`/lessons/gps-status?date=${date}`),
+    request<LessonGpsStatus[]>(`/lessons/gps-status?date=${date}`),
 
   getAttendanceEvents: (params: { lessonId?: string; eventType?: string }) => {
     const qs = new URLSearchParams();

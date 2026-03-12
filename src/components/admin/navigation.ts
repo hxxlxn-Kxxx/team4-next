@@ -39,6 +39,7 @@ export const adminNavigation: AdminNavItem[] = [
     icon: Event,
     children: [
       { label: '수업 관리', href: '/schedules/lessons' },
+      { label: 'GPS 모니터링', href: '/schedules/gps' },
       { label: '수업지 관리', href: '/schedules/locations' },
     ],
   },
